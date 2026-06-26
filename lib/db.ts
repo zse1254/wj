@@ -12,8 +12,10 @@ function getCloudflareDb(): any {
   return undefined
 }
 
-// Detect Cloudflare environment: D1 binding exists OR CF_PAGES flag
-const isCloudflare = typeof process !== 'undefined' && (!!getCloudflareDb() || process.env.CF_PAGES === '1')
+// Detect Cloudflare environment at runtime (not module load time)
+function isCloudflare(): boolean {
+  return typeof process !== 'undefined' && (!!getCloudflareDb() || process.env.CF_PAGES === '1')
+}
 
 async function getLocalDb() {
   if (db) return db
@@ -81,7 +83,7 @@ function seedAdmin(d: any, fs: any, DB_PATH: string) {
 }
 
 export async function query(sql: string, params: unknown[] = []): Promise<Record<string, unknown>[]> {
-  if (isCloudflare) {
+  if (isCloudflare()) {
     const d1 = getCloudflareDb()
     if (!d1) return []
     const result = await d1.prepare(sql).bind(...params).all()
@@ -100,7 +102,7 @@ export async function query(sql: string, params: unknown[] = []): Promise<Record
 }
 
 export async function execute(sql: string, params: unknown[] = []): Promise<{ changes: number; lastInsertRowid: number | bigint | undefined }> {
-  if (isCloudflare) {
+  if (isCloudflare()) {
     const d1 = getCloudflareDb()
     if (!d1) return { changes: 0, lastInsertRowid: undefined }
     const result = await d1.prepare(sql).bind(...params).run()
