@@ -54,17 +54,24 @@ export async function GET(request: Request) {
     }
   }
 
-  // Seed admin (use env vars or defaults)
+  // Seed/update admin (use env vars or defaults)
   try {
     const adminUser = process.env.ADMIN_USERNAME || 'admin'
     const adminPass = process.env.ADMIN_PASSWORD || 'admin123'
     const bcrypt = await import('bcryptjs')
     const hash = bcrypt.hashSync(adminPass, 10)
-    const { v4: uuidv4 } = await import('uuid')
-    await db.prepare(
-      "INSERT OR IGNORE INTO users (id, username, email, password_hash, is_admin) VALUES (?, ?, ?, ?, 1)"
-    ).bind(uuidv4(), adminUser, `${adminUser}@example.com`, hash).all()
-    log.push(`OK: admin seeded (${adminUser} / ${adminPass})`)
+    const existing = await db.prepare("SELECT id FROM users WHERE is_admin = 1").all()
+    if (existing.results?.length > 0) {
+      await db.prepare("UPDATE users SET username = ?, email = ?, password_hash = ? WHERE is_admin = 1")
+        .bind(adminUser, `${adminUser}@example.com`, hash).all()
+      log.push(`OK: admin updated (${adminUser} / ${adminPass})`)
+    } else {
+      const { v4: uuidv4 } = await import('uuid')
+      await db.prepare(
+        "INSERT INTO users (id, username, email, password_hash, is_admin) VALUES (?, ?, ?, ?, 1)"
+      ).bind(uuidv4(), adminUser, `${adminUser}@example.com`, hash).all()
+      log.push(`OK: admin seeded (${adminUser} / ${adminPass})`)
+    }
   } catch (e: any) {
     log.push(`FAIL seed admin: ${e.message}`)
   }

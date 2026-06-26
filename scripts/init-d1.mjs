@@ -73,11 +73,20 @@ try {
   if (checkResult?.results?.length > 0 && checkResult.results[0].count > 0) adminExists = true;
 } catch {}
 
+const adminUser = process.env.ADMIN_USERNAME || 'admin'
+const adminPass = process.env.ADMIN_PASSWORD || 'admin123'
+
 if (adminExists) {
-  console.log("Admin user already exists, skipping seed.");
+  // Update existing admin credentials
+  const bcrypt = (await import("bcryptjs")).default;
+  const hash = bcrypt.hashSync(adminPass, 10);
+  const updateSql = `UPDATE users SET password_hash='${hash}', username='${adminUser}', email='${adminUser}@example.com' WHERE is_admin=1;`;
+  const updateFile = `tmp_update_${Date.now()}.sql`;
+  writeFileSync(updateFile, updateSql, "utf8");
+  run(updateFile);
+  try { unlinkSync(updateFile); } catch {}
+  console.log(`Admin user updated (${adminUser} / ${adminPass}).`);
 } else {
-  const adminUser = process.env.ADMIN_USERNAME || 'admin'
-  const adminPass = process.env.ADMIN_PASSWORD || 'admin123'
   const { v4: uuid } = await import("uuid");
   const bcrypt = (await import("bcryptjs")).default;
   const hash = bcrypt.hashSync(adminPass, 10);
