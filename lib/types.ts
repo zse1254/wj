@@ -15,6 +15,7 @@ export interface Article {
   category_name: string | null
   published: boolean
   author_id: string | null
+  author: string | null
   created_at: string
   updated_at: string
 }
