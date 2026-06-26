@@ -27,15 +27,7 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
       - name: Deploy to Cloudflare Pages
-        id: deploy
-        run: |
-          npx wrangler pages deploy .vercel/output/static --project-name wj-crisis --branch main 2>&1 | tee deploy-log.txt
-          echo "Deploy output:"
-          cat deploy-log.txt
-          echo "URL=" >> $GITHUB_OUTPUT
+        run: npx wrangler pages deploy .vercel/output/static --project-name wj --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Save deploy log
-        run: cat deploy-log.txt
