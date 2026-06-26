@@ -76,16 +76,18 @@ try {
 if (adminExists) {
   console.log("Admin user already exists, skipping seed.");
 } else {
+  const adminUser = process.env.ADMIN_USERNAME || 'admin'
+  const adminPass = process.env.ADMIN_PASSWORD || 'admin123'
   const { v4: uuid } = await import("uuid");
   const bcrypt = (await import("bcryptjs")).default;
-  const hash = bcrypt.hashSync("admin123", 10);
+  const hash = bcrypt.hashSync(adminPass, 10);
   const id = uuid();
-  const insertSql = `INSERT INTO users (id, username, email, password_hash, is_admin) VALUES ('${id}', 'admin', 'admin@example.com', '${hash}', 1);`;
+  const insertSql = `INSERT INTO users (id, username, email, password_hash, is_admin) VALUES ('${id}', '${adminUser}', '${adminUser}@example.com', '${hash}', 1);`;
   const insertFile = `tmp_insert_${Date.now()}.sql`;
   writeFileSync(insertFile, insertSql, "utf8");
   run(insertFile);
   try { unlinkSync(insertFile); } catch {}
-  console.log("Admin user seeded (admin / admin123).");
+  console.log(`Admin user seeded (${adminUser} / ${adminPass}).`);
 }
 
 console.log("\n=== D1 initialization complete ===");
