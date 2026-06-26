@@ -26,30 +26,22 @@ jobs:
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
-      - name: Find output directory
+      - name: Prepare Pages output
         run: |
-          echo "=== Looking for build output ==="
-          ls -la .open-next 2>/dev/null && echo ".open-next exists" || echo "No .open-next"
-          ls -la .vercel 2>/dev/null && echo ".vercel exists" || echo "No .vercel"
-          ls -la .open-next/assets/ 2>/dev/null | head -5 && echo "assets found" || echo "No assets"
-          # Also check if output went somewhere else
-          echo "=== Checking all hidden dirs ==="
-          ls -d .* 2>/dev/null | head -10
+          # Copy entire .open-next as base
+          cp -r .open-next pages-output
+          # Move static assets to root
+          cp -r .open-next/assets/* pages-output/
+          rm -rf pages-output/assets
+          # Rename worker.js to _worker.js (Pages convention)
+          mv pages-output/worker.js pages-output/_worker.js
+          echo "=== pages-output contents ==="
+          ls -la pages-output/ | head -20
+          echo "=== _worker.js ==="
+          head -5 pages-output/_worker.js
 
-      - name: Output structure
-        run: |
-          if [ -d ".open-next/assets" ]; then
-            echo "Using .open-next/assets"
-            ls .open-next/assets/ | head -20
-            npx wrangler pages deploy .open-next/assets --project-name wj --branch main
-          elif [ -d ".vercel/output/static" ]; then
-            echo "Using .vercel/output/static"
-            npx wrangler pages deploy .vercel/output/static --project-name wj --branch main
-          else
-            echo "ERROR: No build output found"
-            find . -name "index.html" -type f 2>/dev/null | head -10
-            exit 1
-          fi
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy pages-output --project-name wj --branch main
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
