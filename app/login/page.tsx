@@ -39,45 +39,48 @@ export default function LoginPage() {
   return (
     <>
       <Header />
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border p-8">
-          <h1 className="text-2xl font-bold text-center mb-6">登录</h1>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">用户名或邮箱</label>
-              <input
-                type="text"
-                value={form.username}
-                onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent outline-none"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">密码</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent outline-none"
-                required
-              />
-            </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#1a73e8] text-white py-2 rounded-lg hover:bg-[#1557b0] disabled:opacity-50 transition-colors"
-            >
-              {loading ? '登录中...' : '登录'}
-            </button>
-          </form>
-          <p className="text-sm text-center mt-4 text-gray-500">
-            没有账号？<Link href="/register" className="text-[#1a73e8] hover:underline">注册</Link>
-          </p>
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-            <p className="font-medium mb-1">测试账号：</p>
-            <p>管理员：admin / admin123</p>
+      <main className="flex-1 flex items-center justify-center px-4 py-16 bg-gradient-to-b from-[#f0f2f5] to-white">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-[#0d2b4a]">欢迎回来</h1>
+            <p className="text-gray-500 text-sm mt-1">登录你的账号</p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">用户名或邮箱</label>
+                <input
+                  type="text"
+                  value={form.username}
+                  onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent outline-none transition-shadow text-sm"
+                  placeholder="输入用户名或邮箱"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] focus:border-transparent outline-none transition-shadow text-sm"
+                  placeholder="输入密码"
+                  required
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#1a4a7a] text-white py-2.5 rounded-xl hover:bg-[#0d2b4a] disabled:opacity-50 transition-all duration-200 font-medium shadow-md hover:shadow-lg"
+              >
+                {loading ? '登录中...' : '登录'}
+              </button>
+            </form>
+            <p className="text-sm text-center mt-6 text-gray-500">
+              没有账号？<Link href="/register" className="text-[#1a73e8] hover:underline font-medium">注册</Link>
+            </p>
           </div>
         </div>
       </main>

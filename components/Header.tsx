@@ -27,43 +27,44 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-gradient-to-r from-[#0d2b4a] to-[#1a4a7a] sticky top-0 z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold text-[#1a73e8]">
-          经济危机生存指南
+        <Link href="/" className="flex items-center gap-2">
+          <span className="text-xl font-bold text-white tracking-tight">经济危机<span className="text-[#f0c75e]">生存指南</span></span>
         </Link>
-        <nav className="hidden md:flex items-center gap-6 text-sm">
-          <Link href="/?type=article" className="hover:text-[#1a73e8] transition-colors">文章</Link>
-          <Link href="/?type=video" className="hover:text-[#1a73e8] transition-colors">视频</Link>
-          <Link href="/?type=audio" className="hover:text-[#1a73e8] transition-colors">音频</Link>
+        <nav className="hidden md:flex items-center gap-1 text-sm">
+          <Link href="/?type=article" className="text-white/80 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">文章</Link>
+          <Link href="/?type=video" className="text-white/80 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">视频</Link>
+          <Link href="/?type=audio" className="text-white/80 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">音频</Link>
           {user?.isAdmin && (
-            <Link href="/admin" className="text-orange-600 hover:text-orange-700 font-medium">管理后台</Link>
+            <Link href="/admin" className="text-[#f0c75e]/90 hover:text-[#f0c75e] px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors font-medium">管理后台</Link>
           )}
         </nav>
         <div className="flex items-center gap-3">
           {user ? (
             <div className="relative">
-              <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 text-sm hover:text-[#1a73e8]">
-                <span className="w-7 h-7 bg-[#1a73e8] text-white rounded-full flex items-center justify-center text-xs font-medium">
+              <button onClick={() => setMenuOpen(!menuOpen)} className="flex items-center gap-2 text-sm text-white/90 hover:text-white">
+                <span className="w-7 h-7 bg-[#f0c75e] text-[#0d2b4a] rounded-full flex items-center justify-center text-xs font-bold">
                   {user.username[0]}
                 </span>
                 <span className="hidden sm:inline">{user.username}</span>
-                {user.isVip && <span className="text-xs bg-yellow-400 text-black px-1.5 py-0.5 rounded font-bold">VIP</span>}
+                {user.isVip && <span className="text-xs bg-[#f0c75e] text-[#0d2b4a] px-1.5 py-0.5 rounded font-bold">VIP</span>}
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg py-1 min-w-[140px] text-sm z-50">
-                  <Link href="/profile" className="block px-4 py-2 hover:bg-gray-50" onClick={() => setMenuOpen(false)}>个人中心</Link>
+                <div className="absolute right-0 top-full mt-2 bg-white border rounded-xl shadow-xl py-1 min-w-[150px] text-sm z-50 overflow-hidden">
+                  <Link href="/profile" className="block px-4 py-2.5 hover:bg-gray-50 text-gray-700" onClick={() => setMenuOpen(false)}>个人中心</Link>
                   {user.isAdmin && (
-                    <Link href="/admin" className="block px-4 py-2 hover:bg-gray-50 text-orange-600" onClick={() => setMenuOpen(false)}>管理后台</Link>
+                    <Link href="/admin" className="block px-4 py-2.5 hover:bg-gray-50 text-[#d4a017] font-medium" onClick={() => setMenuOpen(false)}>管理后台</Link>
                   )}
-                  <button onClick={() => { setMenuOpen(false); handleLogout() }} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-red-500">退出登录</button>
+                  <div className="border-t border-gray-100 my-1" />
+                  <button onClick={() => { setMenuOpen(false); handleLogout() }} className="block w-full text-left px-4 py-2.5 hover:bg-gray-50 text-red-500">退出登录</button>
                 </div>
               )}
             </div>
           ) : (
             <>
-              <Link href="/login" className="text-sm text-[#1a73e8] hover:underline">登录</Link>
-              <Link href="/register" className="text-sm bg-[#1a73e8] text-white px-4 py-1.5 rounded-md hover:bg-[#1557b0] transition-colors">注册</Link>
+              <Link href="/login" className="text-sm text-white/80 hover:text-white transition-colors">登录</Link>
+              <Link href="/register" className="text-sm bg-[#f0c75e] text-[#0d2b4a] px-4 py-1.5 rounded-md hover:bg-[#d4a017] transition-colors font-medium">注册</Link>
             </>
           )}
         </div>

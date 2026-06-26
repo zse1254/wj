@@ -59,15 +59,33 @@ jobs:
           ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
 
-      - name: Patch worker for static assets
-        run: node scripts/patch-worker.mjs
-
       - name: Prepare Pages output
         run: |
+          # 1. Copy entire .open-next to pages-output
           cp -r .open-next pages-output
-          cp -r .open-next/assets/* pages-output/
-          rm -rf pages-output/assets
-          mv pages-output/worker.js pages-output/_worker.js
+          # 2. Move static assets to root (served by Pages platform)
+          cp -r pages-output/.open-next/assets/* pages-output/
+          rm -rf pages-output/.open-next/assets
+          # 3. Move worker dependencies to root
+          for d in pages-output/.open-next/*/; do
+            base=$(basename "$d")
+            [ "$base" = "assets" ] && continue
+            cp -r "$d" "pages-output/$base"
+          done
+          for f in pages-output/.open-next/*.js pages-output/.open-next/*.mjs; do
+            [ -f "$f" ] && cp "$f" pages-output/
+          done
+          rm -rf pages-output/.open-next
+          # 4. Create Pages Function wrapper (handles dynamic routes)
+          mkdir -p pages-output/functions
+          cat > pages-output/functions/[[path]].js << 'WRAPPER'
+            import worker from '../worker.js'
+            export const onRequest = async (ctx) => {
+              const { request, env, ctx: c } = ctx
+              try { return await worker.fetch(request, env, c) }
+              catch (err) { return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } }) }
+            }
+          WRAPPER
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy pages-output --project-name wj --branch main
