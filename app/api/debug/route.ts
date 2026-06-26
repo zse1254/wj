@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
+import { SignJWT, jwtVerify } from 'jose'
 import { query, execute } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
@@ -49,7 +50,16 @@ export async function GET(request: NextRequest) {
     results.uuidSample = id
   } catch (e: any) { results.uuidError = e?.message || String(e) }
 
-  // 5. Direct D1 query test (SELECT on users table)
+  // 5. jose test
+  try {
+    const secret = new TextEncoder().encode('test-secret')
+    const jwt = await new SignJWT({ test: true }).setProtectedHeader({ alg: 'HS256' }).setExpirationTime('1h').sign(secret)
+    const { payload } = await jwtVerify(jwt, secret)
+    results.joseOk = true
+    results.jwtPayload = payload
+  } catch (e: any) { results.joseError = e?.message || String(e) }
+
+  // 6. Direct D1 query test (SELECT on users table)
   try {
     const db = (() => {
       try { const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]; return ctx?.env?.DB } catch { return null }
