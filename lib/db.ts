@@ -1,5 +1,6 @@
 let db: any = null
-const isCloudflare = typeof process !== 'undefined' && process.env.CF_PAGES === '1'
+// Detect Cloudflare environment: D1 binding exists OR running on Cloudflare Pages
+const isCloudflare = typeof process !== 'undefined' && ((process as any).env?.DB != null || process.env.CF_PAGES === '1')
 
 function getCloudflareDb(): any {
   return (process as any).env?.DB
