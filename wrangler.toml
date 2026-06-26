@@ -1,0 +1,13 @@
+name = "wj"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+pages_build_output_dir = ".vercel/output/static"
+
+[vars]
+JWT_SECRET = "change-this-to-a-random-secret-in-production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wj-db"
+database_id = ""
