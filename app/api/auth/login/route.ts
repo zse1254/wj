@@ -3,6 +3,10 @@ import bcrypt from 'bcryptjs'
 import { query } from '@/lib/db'
 import { createToken } from '@/lib/auth'
 
+export async function GET() {
+  return Response.json({ success: true, message: 'login route loaded' })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json()
@@ -39,6 +43,6 @@ export async function POST(request: NextRequest) {
     response.headers.set('Set-Cookie', `token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`)
     return response
   } catch (err) {
-    return Response.json({ success: false, error: 'Server error' }, { status: 500 })
+    return Response.json({ success: false, error: 'Server error', detail: String(err) }, { status: 500 })
   }
 }
