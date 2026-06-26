@@ -1,10 +1,19 @@
 let db: any = null
-// Detect Cloudflare environment: D1 binding exists OR running on Cloudflare Pages
-const isCloudflare = typeof process !== 'undefined' && ((process as any).env?.DB != null || process.env.CF_PAGES === '1')
 
 function getCloudflareDb(): any {
-  return (process as any).env?.DB
+  // Try process.env first (for string bindings)
+  const db = (process as any).env?.DB
+  if (db) return db
+  // Try Cloudflare context (for non-string bindings like D1)
+  try {
+    const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]
+    if (ctx?.env?.DB) return ctx.env.DB
+  } catch {}
+  return undefined
 }
+
+// Detect Cloudflare environment: D1 binding exists OR CF_PAGES flag
+const isCloudflare = typeof process !== 'undefined' && (!!getCloudflareDb() || process.env.CF_PAGES === '1')
 
 async function getLocalDb() {
   if (db) return db

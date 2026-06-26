@@ -2,19 +2,27 @@ import { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
+    const dbFromProcess = (process as any).env?.DB
+    const dbFromCtx = (() => {
+      try { const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]; return !!ctx?.env?.DB } catch { return false }
+    })()
+    const db = dbFromProcess || (() => {
+      try { const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]; return ctx?.env?.DB } catch { return null }
+    })()
+
     const info: Record<string, unknown> = {
       nodeEnv: process.env.NODE_ENV,
-      hasProcess: typeof process !== 'undefined',
-      hasDB: typeof process !== 'undefined' && !!(process as any).env?.DB,
-      cfPages: typeof process !== 'undefined' ? process.env.CF_PAGES : 'N/A',
-      dbType: typeof process !== 'undefined' && !!(process as any).env?.DB ? 'D1' : 'unknown',
+      cfPages: process.env.CF_PAGES,
+      dbFromProcess: !!dbFromProcess,
+      dbFromCloudflareContext: dbFromCtx,
+      hasAnyDB: !!db,
+      dbType: !!db ? 'D1' : 'unknown',
     }
 
     // Try D1 directly
-    if (typeof process !== 'undefined' && (process as any).env?.DB) {
+    if (db) {
       try {
-        const d1 = (process as any).env.DB
-        const result = await d1.prepare('SELECT 1 as test').all()
+        const result = await db.prepare('SELECT 1 as test').all()
         info.d1Result = result.results
         info.d1Ok = true
       } catch (e: any) {
