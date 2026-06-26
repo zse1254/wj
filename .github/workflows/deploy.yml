@@ -21,6 +21,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup D1 database
+        id: setup-d1
+        run: |
+          # Create D1 if not exists, get its ID
+          npx wrangler d1 create wj-db 2>&1 || true
+          # Get the database ID from list
+          npx wrangler d1 list 2>&1 | tee d1-list.txt
+          DB_ID=$(grep -oP '"wj-db"\s*:\s*"\K[a-f0-9-]+' d1-list.txt 2>/dev/null || \
+                  grep -oP 'wj-db\s*\|\s*\K[a-f0-9-]+' d1-list.txt 2>/dev/null)
+          if [ -z "$DB_ID" ]; then
+            echo "Warning: Could not find wj-db database ID"
+          else
+            echo "Found D1 database: $DB_ID"
+            echo "DB_ID=$DB_ID" >> $GITHUB_ENV
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Update wrangler.toml with D1 binding
+        run: |
+          if [ -n "$DB_ID" ]; then
+            echo "" >> wrangler.toml
+            echo "[[d1_databases]]" >> wrangler.toml
+            echo 'binding = "DB"' >> wrangler.toml
+            echo 'database_name = "wj-db"' >> wrangler.toml
+            echo "database_id = \"$DB_ID\"" >> wrangler.toml
+            echo "Updated wrangler.toml with D1 binding: $DB_ID"
+          else
+            echo "Warning: D1 database ID not found, skipping binding"
+          fi
+
       - name: Build for Cloudflare
         run: npx opennextjs-cloudflare build
         env:
@@ -28,17 +60,10 @@ jobs:
 
       - name: Prepare Pages output
         run: |
-          # Copy entire .open-next as base
           cp -r .open-next pages-output
-          # Move static assets to root
           cp -r .open-next/assets/* pages-output/
           rm -rf pages-output/assets
-          # Rename worker.js to _worker.js (Pages convention)
           mv pages-output/worker.js pages-output/_worker.js
-          echo "=== pages-output contents ==="
-          ls -la pages-output/ | head -20
-          echo "=== _worker.js ==="
-          head -5 pages-output/_worker.js
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy pages-output --project-name wj --branch main
