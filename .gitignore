@@ -45,6 +45,9 @@ public/uploads/*
 # vercel
 .vercel
 
+# opennext build output
+.open-next/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
