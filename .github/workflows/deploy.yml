@@ -24,35 +24,14 @@ jobs:
       - name: Get D1 database ID
         id: d1
         run: |
-          npx wrangler d1 list --json > d1-list.json 2>&1 || true
-          cat d1-list.json
-          # Try to extract the database ID for wj-db
-          DB_ID=$(node -e "
-            const data = require('fs').readFileSync('d1-list.json','utf8');
-            try {
-              const list = JSON.parse(data);
-              const db = list.find(d => d.name === 'wj-db' || d.database_name === 'wj-db');
-              if (db) console.log(db.uuid || db.database_id);
-            } catch(e) { console.error(e.message); }
-          ")
+          OUTPUT=$(node scripts/get-d1-id.mjs 2>&1) || true
+          echo "$OUTPUT"
+          DB_ID=$(echo "$OUTPUT" | grep -oE '[A-Z_]+_DB_ID=[a-f0-9-]+' | head -1 | grep -oE '[a-f0-9-]{20,}')
           if [ -n "$DB_ID" ]; then
-            echo "D1 database ID: $DB_ID"
             echo "DB_ID=$DB_ID" >> $GITHUB_ENV
+            echo "Found D1 database: $DB_ID"
           else
-            echo "Creating new D1 database..."
-            npx wrangler d1 create wj-db --json > d1-create.json 2>&1 || true
-            cat d1-create.json
-            DB_ID=$(node -e "
-              const data = require('fs').readFileSync('d1-create.json','utf8');
-              try {
-                const result = JSON.parse(data);
-                console.log(result.uuid || result.database_id);
-              } catch(e) { console.error(e.message); }
-            ")
-            if [ -n "$DB_ID" ]; then
-              echo "Created D1 database ID: $DB_ID"
-              echo "DB_ID=$DB_ID" >> $GITHUB_ENV
-            fi
+            echo "Warning: Could not find D1 database"
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
