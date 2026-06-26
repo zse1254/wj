@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { v4 as uuidv4 } from 'uuid'
 import { SignJWT, jwtVerify } from 'jose'
+import { createToken } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
@@ -59,7 +60,38 @@ export async function GET(request: NextRequest) {
     results.jwtPayload = payload
   } catch (e: any) { results.joseError = e?.message || String(e) }
 
-  // 6. Direct D1 query test (SELECT on users table)
+  // 6. createToken test
+  try {
+    const t = await createToken({ userId: 'test', isAdmin: false })
+    results.createTokenOk = true
+    results.createTokenSample = t.substring(0, 30) + '...'
+  } catch (e: any) { results.createTokenError = e?.message || String(e) }
+
+  // 7. Simulate login
+  try {
+    const db = (() => { try { const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]; return ctx?.env?.DB } catch { return null } })()
+    if (db) {
+      const users = await db.prepare("SELECT * FROM users WHERE username = ?").bind('admin').all()
+      const userList = users.results || []
+      if (userList.length > 0) {
+        const pwOk = bcrypt.compareSync('admin123', userList[0].password_hash)
+        results.simLoginUserFound = true
+        results.simLoginPwOk = pwOk
+        if (pwOk) {
+          const t = await createToken({ userId: userList[0].id, isAdmin: !!userList[0].is_admin })
+          results.simLoginTokenOk = true
+          results.simLoginToken = t.substring(0, 30) + '...'
+        }
+      } else {
+        results.simLoginUserFound = false
+      }
+      // Try calling query helper
+      const viaQuery = await query("SELECT id, username FROM users WHERE username = ?", ['admin'])
+      results.queryHelperUsers = viaQuery
+    }
+  } catch (e: any) { results.simLoginError = e?.message || String(e) }
+
+  // 8. Direct D1 query test (SELECT on users table)
   try {
     const db = (() => {
       try { const ctx = (globalThis as any)[Symbol.for('__cloudflare-context__')]; return ctx?.env?.DB } catch { return null }
