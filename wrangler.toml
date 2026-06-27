@@ -4,6 +4,9 @@ compatibility_flags = ["nodejs_compat"]
 
 pages_build_output_dir = ".vercel/output/static"
 
+[assets]
+run_worker_first = true
+
 [vars]
 JWT_SECRET = "change-this-to-a-random-secret-in-production"
 # ADMIN_USERNAME / ADMIN_PASSWORD can be overridden via Cloudflare Dashboard env vars
