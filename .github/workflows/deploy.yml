@@ -61,8 +61,9 @@ jobs:
 
       - name: Prepare Pages output
         run: |
-          # 1. Copy entire .open-next to pages-output
-          cp -r .open-next pages-output
+          # 1. Copy entire .open-next to pages-output/.open-next
+          mkdir -p pages-output
+          cp -r .open-next pages-output/.open-next
           # 2. Move static assets to root (served by Pages platform)
           cp -r pages-output/.open-next/assets/* pages-output/
           rm -rf pages-output/.open-next/assets
