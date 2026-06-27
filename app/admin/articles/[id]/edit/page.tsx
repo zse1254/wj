@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function EditArticlePage() {
@@ -14,6 +14,9 @@ export default function EditArticlePage() {
     cover_image: '', video_url: '', audio_url: '', bilibili_url: '',
     is_m3u8: false, category_id: '', published: true,
   })
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState('')
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -33,6 +36,42 @@ export default function EditArticlePage() {
       }
     }).finally(() => setLoading(false))
   }, [params.id])
+
+  const fetchBilibiliInfo = useCallback(async (url: string) => {
+    setFetchError('')
+    if (!url || !url.includes('bilibili')) return
+    setFetching(true)
+    try {
+      const res = await fetch('/api/admin/bilibili', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        const v = data.data.video
+        setForm(f => ({
+          ...f,
+          title: f.title === f.bilibili_url ? v.title : f.title,
+          summary: f.summary || v.description,
+          cover_image: f.cover_image || v.cover_url,
+        }))
+      } else {
+        setFetchError(data.error || '获取失败')
+      }
+    } catch {
+      setFetchError('网络错误')
+    } finally {
+      setFetching(false)
+    }
+  }, [])
+
+  const handleBilibiliUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setForm(f => ({ ...f, bilibili_url: val }))
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => fetchBilibiliInfo(val), 600)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -105,8 +144,13 @@ export default function EditArticlePage() {
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
             <div>
               <label className="block text-sm font-medium mb-1">Bilibili 链接</label>
-              <input type="url" value={form.bilibili_url} onChange={e => setForm(f => ({ ...f, bilibili_url: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none" />
+              <div className="flex gap-2">
+                <input type="url" value={form.bilibili_url} onChange={handleBilibiliUrlChange}
+                  className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none"
+                  placeholder="粘贴 Bilibili 链接自动获取信息" />
+                {fetching && <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mt-2.5" />}
+              </div>
+              {fetchError && <p className="text-red-500 text-xs mt-1">{fetchError}</p>}
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1">
