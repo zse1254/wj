@@ -60,7 +60,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
 
       - name: Enable asset serving in _worker.js mode
-        run: sed -i 's/__ASSETS_RUN_WORKER_FIRST__: false/__ASSETS_RUN_WORKER_FIRST__: true/' .open-next/cloudflare/init.js
+        run: sed -i "s/__ASSETS_RUN_WORKER_FIRST__: false/__ASSETS_RUN_WORKER_FIRST__: true/" .open-next/cloudflare/init.js
 
       - name: Prepare Pages output
         run: |
