@@ -61,32 +61,14 @@ jobs:
 
       - name: Prepare Pages output
         run: |
-          # 1. Copy entire .open-next to pages-output/.open-next
           mkdir -p pages-output
-          cp -r .open-next pages-output/.open-next
-          # 2. Move static assets to root (served by Pages platform)
-          cp -r pages-output/.open-next/assets/* pages-output/
-          rm -rf pages-output/.open-next/assets
-          # 3. Move worker dependencies to root
-          for d in pages-output/.open-next/*/; do
-            base=$(basename "$d")
-            [ "$base" = "assets" ] && continue
-            cp -r "$d" "pages-output/$base"
-          done
-          for f in pages-output/.open-next/*.js pages-output/.open-next/*.mjs; do
-            [ -f "$f" ] && cp "$f" pages-output/
-          done
-          rm -rf pages-output/.open-next
-          # 4. Create Pages Function wrapper (handles dynamic routes)
-          mkdir -p pages-output/functions
-          cat > pages-output/functions/[[path]].js << 'WRAPPER'
-            import worker from '../worker.js'
-            export const onRequest = async (ctx) => {
-              const { request, env, ctx: c } = ctx
-              try { return await worker.fetch(request, env, c) }
-              catch (err) { return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } }) }
-            }
-          WRAPPER
+          # Copy .open-next contents (including hidden dirs like .build/) to pages-output/
+          (cd .open-next && tar cf - .) | (cd pages-output && tar xf -)
+          # Move static assets to root so Cloudflare serves them directly via ASSETS binding
+          cp -r pages-output/assets/* pages-output/
+          rm -rf pages-output/assets
+          # Rename worker.js -> _worker.js (Cloudflare catch-all handler)
+          cp pages-output/worker.js pages-output/_worker.js
 
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy pages-output --project-name wj --branch main
