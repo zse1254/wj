@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { extractBilibiliBvid, parseBilibiliHtml } from '@/lib/bilibili'
 
 interface BilibiliVideo {
   bvid: string
@@ -46,6 +47,18 @@ export default function NewArticlePage() {
     setSelectedVideos(new Set())
     if (!url || !url.includes('bilibili')) return
     setFetching(true)
+
+    const bvid = extractBilibiliBvid(url)
+
+    const fillForm = (v: { title: string; description?: string; cover_url?: string }) => {
+      setForm(f => ({
+        ...f,
+        title: f.title || v.title,
+        summary: f.summary || v.description || '',
+        cover_image: f.cover_image || v.cover_url || '',
+      }))
+    }
+
     try {
       const res = await fetch('/api/admin/bilibili', {
         method: 'POST',
@@ -55,12 +68,7 @@ export default function NewArticlePage() {
       const data = await res.json()
       if (data.success) {
         const v = data.data.video
-        setForm(f => ({
-          ...f,
-          title: f.title || v.title,
-          summary: f.summary || v.description,
-          cover_image: f.cover_image || v.cover_url,
-        }))
+        fillForm(v)
         if (data.data.series) {
           setSeriesInfo({
             title: data.data.series.title,
@@ -68,14 +76,50 @@ export default function NewArticlePage() {
           })
           setSelectedVideos(new Set(data.data.series.videos.map((_: unknown, i: number) => i)))
         }
-      } else {
-        setFetchError(data.error || '获取失败')
+        return
       }
+      // Server failed (likely 412 from Cloudflare → Bilibili blocks Worker IPs)
+      // Fall through to client-side CORS proxy
     } catch {
-      setFetchError('网络错误')
-    } finally {
-      setFetching(false)
+      // Fall through to client-side CORS proxy
     }
+
+    // Client-side fallback: fetch Bilibili page via CORS proxy (uses user's IP)
+    if (!bvid) {
+      setFetchError('无法识别 Bilibili 链接格式')
+      setFetching(false)
+      return
+    }
+
+    const proxies = [
+      (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    ]
+
+    for (const buildProxy of proxies) {
+      try {
+        const pageUrl = `https://www.bilibili.com/video/${bvid}`
+        const proxyRes = await fetch(buildProxy(pageUrl), { signal: AbortSignal.timeout(8000) })
+        if (!proxyRes.ok) continue
+        const html = await proxyRes.text()
+        const parsed = parseBilibiliHtml(html, bvid)
+        fillForm(parsed.video)
+        if (parsed.series) {
+          setSeriesInfo({
+            title: parsed.series.title,
+            videos: parsed.series.videos,
+          })
+          setSelectedVideos(new Set(parsed.series.videos.map((_: unknown, i: number) => i)))
+        }
+        setFetching(false)
+        return
+      } catch {
+        continue
+      }
+    }
+
+    setFetchError('获取失败（Bilibili 屏蔽了服务器请求）')
+    setFetching(false)
   }, [])
 
   const handleBilibiliUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {

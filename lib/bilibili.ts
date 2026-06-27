@@ -32,10 +32,30 @@ export function getBilibiliCoverUrl(bvid: string): string {
   return `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
 }
 
+function generateBuvid3(): string {
+  const hex = () => Math.random().toString(16).slice(2, 10)
+  return `${hex()}-${hex().slice(0,4)}-${hex().slice(0,4)}-${hex().slice(0,4)}-${hex()}${hex().slice(0,4)}infoc`
+}
+
 function bilibiliHeaders() {
   return {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.bilibili.com',
+    'Origin': 'https://www.bilibili.com',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Cookie': `buvid3=${generateBuvid3()}`,
+  }
+}
+
+function bilibiliHtmlHeaders() {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.bilibili.com',
+    'Origin': 'https://www.bilibili.com',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Cookie': `buvid3=${generateBuvid3()}`,
   }
 }
 
@@ -102,16 +122,13 @@ export async function fetchBilibiliSeries(seasonId: number): Promise<BilibiliSer
   }
 }
 
-export async function fetchBilibiliHtmlFallback(bvid: string): Promise<{
+export interface BilibiliHtmlData {
   video: BilibiliVideo
   season_id?: number
   series?: BilibiliSeries
-}> {
-  const pageUrl = `https://www.bilibili.com/video/${bvid}`
-  const res = await fetch(pageUrl, { headers: bilibiliHeaders() })
-  if (!res.ok) throw new Error(`Bilibili page error: ${res.status}`)
-  const html = await res.text()
+}
 
+export function parseBilibiliHtml(html: string, bvid: string): BilibiliHtmlData {
   const match = html.match(/window\.__INITIAL_STATE__\s*=\s*({.*?});/)
   if (!match) throw new Error('Cannot parse Bilibili page data')
 
@@ -146,4 +163,12 @@ export async function fetchBilibiliHtmlFallback(bvid: string): Promise<{
   }
 
   return { video, season_id, series }
+}
+
+export async function fetchBilibiliHtmlFallback(bvid: string): Promise<BilibiliHtmlData> {
+  const pageUrl = `https://www.bilibili.com/video/${bvid}`
+  const res = await fetch(pageUrl, { headers: bilibiliHtmlHeaders() })
+  if (!res.ok) throw new Error(`Bilibili page error: ${res.status}`)
+  const html = await res.text()
+  return parseBilibiliHtml(html, bvid)
 }
