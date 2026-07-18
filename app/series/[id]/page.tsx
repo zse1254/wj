@@ -12,6 +12,7 @@ interface SeriesVideo {
   title: string
   cover_url: string
   duration?: number
+  page?: number
 }
 
 export default function SeriesDetailPage() {
