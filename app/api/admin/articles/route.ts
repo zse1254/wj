@@ -3,6 +3,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
 
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^\w\u4e00-\u9fff]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'post'
+}
+
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin()
@@ -57,11 +61,12 @@ export async function POST(request: NextRequest) {
     }
 
     id = uuidv4()
+    const slug = `${slugify(body.title)}-${Date.now()}`
     await execute(
-      `INSERT INTO articles (id, title, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO articles (id, title, slug, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        id, body.title, body.content || '', body.summary || '', body.cover_image || null,
+        id, body.title, slug, body.content || '', body.summary || '', body.cover_image || null,
         body.type, body.video_url || null, body.audio_url || null, body.bilibili_url || null,
         body.is_m3u8 ? 1 : 0, body.category_id || null, body.published ? 1 : 0, admin.userId,
       ]
@@ -75,13 +80,14 @@ export async function POST(request: NextRequest) {
       try {
         await ensureColumns()
         id = uuidv4()
+        const retrySlug = `${slugify(body?.title || 'post')}-${Date.now()}`
         const d1 = (globalThis as any)[Symbol.for('__cloudflare-context__')]?.env?.DB || (process as any).env?.DB
         if (d1) {
           await d1.prepare(
-            `INSERT INTO articles (id, title, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO articles (id, title, slug, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(
-            id, body?.title || '', body?.content || '', body?.summary || '', body?.cover_image || null,
+            id, body?.title || '', retrySlug, body?.content || '', body?.summary || '', body?.cover_image || null,
             body?.type || 'video', body?.video_url || null, body?.audio_url || null, body?.bilibili_url || null,
             body?.is_m3u8 ? 1 : 0, body?.category_id || null, body?.published ? 1 : 0, admin?.userId || '',
           ).all()
