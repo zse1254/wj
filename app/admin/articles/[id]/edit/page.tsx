@@ -235,6 +235,7 @@ export default function EditArticlePage() {
               </div>
             ))}
           </div>
+          {form.type === 'series' && <p className="text-xs text-green-600 mt-2">✅ 已选择合集类型，点下方「保存」提交。</p>}
         </div>
       )}
     </div>
