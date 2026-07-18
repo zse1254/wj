@@ -74,9 +74,17 @@ export interface BilibiliSeries {
   videos: BilibiliVideo[]
 }
 
+export interface BilibiliPage {
+  cid: number
+  page: number
+  part: string
+  duration: number
+}
+
 export async function fetchBilibiliVideoInfo(bvid: string): Promise<{
   video: BilibiliVideo
   season_id?: number
+  pages: BilibiliPage[]
 }> {
   const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
   const res = await fetch(apiUrl, { headers: bilibiliHeaders() })
@@ -97,7 +105,13 @@ export async function fetchBilibiliVideoInfo(bvid: string): Promise<{
   if (d.ugc_season?.id) {
     season_id = d.ugc_season.id
   }
-  return { video, season_id }
+  const pages: BilibiliPage[] = (d.pages || []).map((p: Record<string, unknown>) => ({
+    cid: Number(p.cid) || 0,
+    page: Number(p.page) || 0,
+    part: (p.part as string) || '',
+    duration: Number(p.duration) || 0,
+  }))
+  return { video, season_id, pages }
 }
 
 export async function fetchBilibiliSeries(seasonId: number): Promise<BilibiliSeries> {
