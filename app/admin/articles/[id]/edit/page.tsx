@@ -41,29 +41,37 @@ export default function EditArticlePage() {
     setFetchError('')
     if (!url || !url.includes('bilibili')) return
     setFetching(true)
+
+    const fill = (v: { title: string; description?: string; cover_url?: string }) => {
+      setForm(f => ({
+        ...f,
+        title: f.title === f.bilibili_url ? v.title : f.title,
+        summary: f.summary || v.description || '',
+        cover_image: f.cover_image || v.cover_url || '',
+      }))
+    }
+
+    // 1) Server-side
     try {
       const res = await fetch('/api/admin/bilibili', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
       })
       const data = await res.json()
-      if (data.success) {
-        const v = data.data.video
-        setForm(f => ({
-          ...f,
-          title: f.title === f.bilibili_url ? v.title : f.title,
-          summary: f.summary || v.description,
-          cover_image: f.cover_image || v.cover_url,
-        }))
-      } else {
-        setFetchError(data.error || '获取失败')
-      }
-    } catch {
-      setFetchError('网络错误')
-    } finally {
-      setFetching(false)
-    }
+      if (data.success) { fill(data.data.video); return }
+    } catch {}
+
+    // 2) Deno Deploy proxy
+    try {
+      const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+        signal: AbortSignal.timeout(15000),
+      })
+      const denoData = await denoRes.json()
+      if (denoData.success) { fill(denoData.data.video); return }
+    } catch {}
+
+    setFetchError('Bilibili page error: 412')
+    setFetching(false)
   }, [])
 
   const handleBilibiliUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
