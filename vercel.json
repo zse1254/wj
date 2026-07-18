@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "api/bilibili-proxy.mjs",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/bilibili",
+      "dest": "/api/bilibili-proxy.mjs"
+    }
+  ]
+}
