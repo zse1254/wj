@@ -16,6 +16,7 @@ export default function EditArticlePage() {
   })
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
+  const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: { bvid: string; title: string; cover_url: string; page?: number }[] } | null>(null)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -39,16 +40,18 @@ export default function EditArticlePage() {
 
   const fetchBilibiliInfo = useCallback(async (url: string) => {
     setFetchError('')
+    setSeriesInfo(null)
     if (!url || !url.includes('bilibili')) return
     setFetching(true)
 
-    const fill = (v: { title: string; description?: string; cover_url?: string }) => {
+    const fill = (v: { title: string; description?: string; cover_url?: string }, series?: typeof seriesInfo) => {
       setForm(f => ({
         ...f,
         title: f.title === f.bilibili_url ? v.title : f.title,
         summary: f.summary || v.description || '',
         cover_image: f.cover_image || v.cover_url || '',
       }))
+      if (series) setSeriesInfo(series)
       setFetching(false)
     }
 
@@ -58,22 +61,24 @@ export default function EditArticlePage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
       })
       const data = await res.json()
-      if (data.success) { fill(data.data.video); return }
-      console.warn('Server endpoint failed:', res.status, data)
-    } catch (e) { console.warn('Server endpoint error:', e) }
+      if (data.success) {
+        fill(data.data.video, data.data.series ? { title: data.data.series.title, videos: data.data.series.videos } : null)
+        return
+      }
+    } catch {}
 
     // 2) Deno Deploy proxy
     try {
-      console.log('Trying Deno proxy...')
       const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
         signal: AbortSignal.timeout(15000),
       })
-      console.log('Deno proxy response:', denoRes.status)
       const denoData = await denoRes.json()
-      console.log('Deno proxy data:', denoData)
-      if (denoData.success) { fill(denoData.data.video); return }
-    } catch (e) { console.warn('Deno proxy error:', e) }
+      if (denoData.success) {
+        fill(denoData.data.video, denoData.data.series ? { title: denoData.data.series.title, videos: denoData.data.series.videos } : null)
+        return
+      }
+    } catch {}
 
     setFetchError('Bilibili page error: 412')
     setFetching(false)
@@ -210,6 +215,28 @@ export default function EditArticlePage() {
           </div>
         </div>
       </form>
+
+      {seriesInfo && (
+        <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">
+          <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>
+          <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
+          <button type="button" onClick={() => {
+            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page })) })
+            setForm(f => ({ ...f, type: 'series', content: videosJson }))
+          }}
+            className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">
+            📺 保存为合集
+          </button>
+          <div className="max-h-60 overflow-y-auto space-y-2 mt-3">
+            {seriesInfo.videos.map((v, i) => (
+              <div key={v.bvid + (v.page || '')} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                {v.cover_url && <img src={v.cover_url} alt="" className="w-14 h-9 object-cover rounded shrink-0" />}
+                <span className="text-sm truncate">{i + 1}. {v.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
