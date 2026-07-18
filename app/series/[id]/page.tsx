@@ -26,7 +26,25 @@ export default function SeriesDetailPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [durations, setDurations] = useState<Record<string, number>>({})
 
-  // Prevent Bilibili navigation + auto-advance when video ends
+  // Listen ALL postMessage from Bilibili to find ended event
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (!e.origin?.includes('bilibili.com')) return
+      console.log('[Bili msg]', JSON.stringify(e.data).slice(0, 200))
+      if (autoplay && currentIndex < videos.length - 1) {
+        const raw = e.data
+        const msg = typeof raw === 'string' ? (() => { try { return JSON.parse(raw) } catch { return null } })() : raw
+        if (msg && (msg.type === 'ended' || msg.event === 'ended' || msg.state === 'ended')) {
+          console.log('[Bili msg] -> playNext!')
+          playNext()
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [currentIndex, autoplay, videos.length])
+
+  // beforeunload fallback
   const navBlockedRef = useRef(false)
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
