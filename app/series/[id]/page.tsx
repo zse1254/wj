@@ -48,13 +48,53 @@ export default function SeriesDetailPage() {
     }).finally(() => setLoading(false))
   }, [params.id])
 
-  // Fallback: fetch total duration per bvid, split by how many episodes share that bvid
+  // Fallback: fetch exact per-page durations from Bilibili view API (via CORS proxies)
+  // or fall back to Deno proxy total/count if exact unavailable.
   useEffect(() => {
     if (videos.length === 0) return
     ;(async () => {
       const bvids = Array.from(new Set(videos.map(v => v.bvid)))
-      const totalByBvid: Record<string, number> = {}
+      const exactByIndex: Record<number, number> = {}
+
       for (const bvid of bvids) {
+        const idxNeeding = videos.reduce<number[]>((acc, v, i) => {
+          if (v.bvid === bvid && durations[i] == null) acc.push(i)
+          return acc
+        }, [])
+        if (idxNeeding.length === 0) continue
+
+        // Try Bilibili view API through CORS proxies for exact pages durations
+        let gotExact = false
+        const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
+        const corsProxies = [
+          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+          (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        ]
+        for (const buildProxy of corsProxies) {
+          try {
+            const res = await fetch(buildProxy(apiUrl), { signal: AbortSignal.timeout(8000) })
+            if (!res.ok) continue
+            const json = await res.json()
+            if (json.code === 0 && Array.isArray(json.data?.pages)) {
+              for (const p of json.data.pages) {
+                const pg = Number(p.page) || 0
+                const dur = Number(p.duration) || 0
+                if (pg && dur) {
+                  videos.forEach((v, i) => {
+                    if (v.bvid === bvid && (v.page || i + 1) === pg && exactByIndex[i] == null) {
+                      exactByIndex[i] = dur
+                    }
+                  })
+                }
+              }
+              gotExact = true
+              break
+            }
+          } catch {}
+        }
+        if (gotExact) continue
+
+        // Fallback: Deno proxy (total / count)
         if (requestedBvidsRef.current.has(bvid)) continue
         requestedBvidsRef.current.add(bvid)
         try {
@@ -65,22 +105,15 @@ export default function SeriesDetailPage() {
           })
           const data = await res.json()
           if (data.success && data.data?.video?.duration) {
-            totalByBvid[bvid] = data.data.video.duration
+            const count = videos.filter(v => v.bvid === bvid).length
+            const per = Math.max(30, Math.round(data.data.video.duration / count))
+            idxNeeding.forEach(i => { if (exactByIndex[i] == null) exactByIndex[i] = per })
           }
         } catch {}
       }
-      if (Object.keys(totalByBvid).length === 0) return
-      setDurations(prev => {
-        const next = { ...prev }
-        for (const [bvid, total] of Object.entries(totalByBvid)) {
-          const count = videos.filter(v => v.bvid === bvid).length
-          const per = Math.max(30, Math.round(total / count))
-          videos.forEach((v, i) => {
-            if (v.bvid === bvid && next[i] == null) next[i] = per
-          })
-        }
-        return next
-      })
+
+      if (Object.keys(exactByIndex).length === 0) return
+      setDurations(prev => ({ ...prev, ...exactByIndex }))
     })()
   }, [videos])
 
