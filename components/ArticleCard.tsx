@@ -7,6 +7,7 @@ const typeConfig: Record<string, { label: string; icon: string }> = {
   article: { label: '文章', icon: '📄' },
   video: { label: '视频', icon: '🎬' },
   audio: { label: '音频', icon: '🎧' },
+  series: { label: '合集', icon: '📺' },
 }
 
 export default function ArticleCard({ article }: { article: Article }) {

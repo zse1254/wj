@@ -296,6 +296,7 @@ export default function NewArticlePage() {
               className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none">
               <option value="article">文章</option>
               <option value="video">视频</option>
+              <option value="series">合集</option>
               <option value="audio">音频</option>
             </select>
           </div>
@@ -386,8 +387,23 @@ export default function NewArticlePage() {
       {seriesInfo && (
         <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">
           <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>
-          <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频，选择要批量添加的视频</p>
-          <div className="flex items-center gap-3 mb-3">
+          <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <button type="button" onClick={() => {
+              const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url })) })
+              setForm(f => ({
+                ...f,
+                type: 'series',
+                title: seriesInfo.title,
+                cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '',
+                summary: f.summary || '',
+                content: videosJson,
+              }))
+            }}
+              className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">
+              📺 创建合集（1 篇合集）
+            </button>
+            <span className="text-xs text-gray-400">或</span>
             <label className="flex items-center gap-1.5 text-sm">
               <input type="checkbox" checked={selectedVideos.size === seriesInfo.videos.length}
                 onChange={() => {

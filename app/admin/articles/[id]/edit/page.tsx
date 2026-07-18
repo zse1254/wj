@@ -113,6 +113,7 @@ export default function EditArticlePage() {
               className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none">
               <option value="article">文章</option>
               <option value="video">视频</option>
+              <option value="series">合集</option>
               <option value="audio">音频</option>
             </select>
           </div>

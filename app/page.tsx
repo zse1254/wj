@@ -6,7 +6,7 @@ import Footer from '@/components/Footer'
 import ArticleCard from '@/components/ArticleCard'
 import type { Article } from '@/lib/types'
 
-type TabType = '' | 'article' | 'video' | 'audio'
+type TabType = '' | 'article' | 'video' | 'audio' | 'series'
 
 export default function HomePage() {
   const [articles, setArticles] = useState<Article[]>([])
@@ -47,6 +47,7 @@ export default function HomePage() {
     { key: '', label: '推荐' },
     { key: 'article', label: '文章' },
     { key: 'video', label: '视频' },
+    { key: 'series', label: '合集' },
     { key: 'audio', label: '音频' },
   ]
 

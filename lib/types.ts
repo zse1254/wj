@@ -1,4 +1,4 @@
-export type ArticleType = 'article' | 'video' | 'audio'
+export type ArticleType = 'article' | 'video' | 'audio' | 'series'
 
 export interface Article {
   id: string
