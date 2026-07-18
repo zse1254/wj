@@ -53,6 +53,33 @@ export async function POST(request: NextRequest) {
     return Response.json({ success: true, data: { id } }, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'
+    // Auto-migrate: if column missing, try adding it
+    if (msg?.includes('has no column named') || msg?.includes('SQLITE_ERROR')) {
+      try {
+        const migrations = [
+          "ALTER TABLE articles ADD COLUMN cover_image TEXT",
+          "ALTER TABLE articles ADD COLUMN video_url TEXT",
+          "ALTER TABLE articles ADD COLUMN is_m3u8 INTEGER DEFAULT 0",
+          "ALTER TABLE articles ADD COLUMN published INTEGER DEFAULT 0",
+          "ALTER TABLE articles ADD COLUMN author_id TEXT",
+          "ALTER TABLE articles ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
+        ]
+        for (const sql of migrations) {
+          try { await execute(sql) } catch {}
+        }
+        // Retry the insert
+        await execute(
+          `INSERT INTO articles (id, title, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id, body.title, body.content || '', body.summary || '', body.cover_image || null,
+            body.type, body.video_url || null, body.audio_url || null, body.bilibili_url || null,
+            body.is_m3u8 ? 1 : 0, body.category_id || null, body.published ? 1 : 0, admin.userId,
+          ]
+        )
+        return Response.json({ success: true, data: { id } }, { status: 201 })
+      } catch {}
+    }
     const status = msg === 'Unauthorized' ? 401 : msg === 'Forbidden' ? 403 : 500
     return Response.json({ success: false, error: msg }, { status })
   }
