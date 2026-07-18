@@ -95,7 +95,7 @@ export default function SeriesDetailPage() {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (!autoplay || !currentVideo) return
     const dur = durations[currentBvid || '']
-    if (!dur || dur > 7200) return // skip if >2h (likely wrong)
+    if (!dur) return
     timerRef.current = setTimeout(() => { playNext() }, (dur + 2) * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [currentIndex, autoplay, durations])
