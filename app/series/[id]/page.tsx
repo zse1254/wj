@@ -139,7 +139,6 @@ export default function SeriesDetailPage() {
                 frameBorder="0"
                 allowFullScreen
                 allow="autoplay"
-                sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
                 style={{
                   position: 'absolute',
                   top: 0,
