@@ -26,7 +26,7 @@ export default function SeriesDetailPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const requestedBvidsRef = useRef<Set<string>>(new Set())
-  const [durations, setDurations] = useState<Record<string, number>>({})
+  const [durations, setDurations] = useState<Record<number, number>>({})
   const [remaining, setRemaining] = useState<number | null>(null)
 
   useEffect(() => {
@@ -35,13 +35,20 @@ export default function SeriesDetailPage() {
         setArticle(res.data)
         try {
           const parsed = JSON.parse(res.data.content || '{}')
-          if (Array.isArray(parsed.videos)) setVideos(parsed.videos)
+          if (Array.isArray(parsed.videos)) {
+            setVideos(parsed.videos)
+            const preset: Record<number, number> = {}
+            parsed.videos.forEach((v: SeriesVideo, i: number) => {
+              if (typeof v.duration === 'number' && v.duration > 0) preset[i] = v.duration
+            })
+            if (Object.keys(preset).length > 0) setDurations(preset)
+          }
         } catch {}
       }
     }).finally(() => setLoading(false))
   }, [params.id])
 
-  // Fetch durations per bvid, then split total by how many episodes share that bvid
+  // Fallback: fetch total duration per bvid, split by how many episodes share that bvid
   useEffect(() => {
     if (videos.length === 0) return
     ;(async () => {
@@ -67,7 +74,10 @@ export default function SeriesDetailPage() {
         const next = { ...prev }
         for (const [bvid, total] of Object.entries(totalByBvid)) {
           const count = videos.filter(v => v.bvid === bvid).length
-          next[bvid] = Math.max(30, Math.round(total / count))
+          const per = Math.max(30, Math.round(total / count))
+          videos.forEach((v, i) => {
+            if (v.bvid === bvid && next[i] == null) next[i] = per
+          })
         }
         return next
       })
@@ -159,7 +169,7 @@ export default function SeriesDetailPage() {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (intervalRef.current) clearInterval(intervalRef.current)
     if (!autoplay || !currentVideo) { queueMicrotask(() => setRemaining(null)); return }
-    const dur = durations[currentBvid || '']
+    const dur = durations[currentIndex] ?? currentVideo.duration ?? 0
     if (!dur) { queueMicrotask(() => setRemaining(null)); return }
     const total = (dur + 5) * 1000
     const start = Date.now()

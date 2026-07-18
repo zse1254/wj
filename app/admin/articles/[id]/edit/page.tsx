@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import type { BilibiliVideo } from '@/lib/bilibili'
 
 export default function EditArticlePage() {
   const router = useRouter()
@@ -16,7 +17,7 @@ export default function EditArticlePage() {
   })
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
-  const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: { bvid: string; title: string; cover_url: string; page?: number }[] } | null>(null)
+  const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -221,7 +222,7 @@ export default function EditArticlePage() {
           <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <button type="button" onClick={() => {
-            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page })) })
+            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration })) })
             setForm(f => ({ ...f, type: 'series', content: videosJson, cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '' }))
           }}
             className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">

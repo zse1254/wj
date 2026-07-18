@@ -65,6 +65,7 @@ export interface BilibiliVideo {
   description: string
   cover_url: string
   duration: number
+  page?: number
 }
 
 export interface BilibiliSeries {
@@ -147,18 +148,30 @@ export function parseBilibiliHtml(html: string, bvid: string): BilibiliHtmlData 
   let season_id: number | undefined
   let series: BilibiliSeries | undefined
 
+  // pages[] 含每 P 的准确 duration，按 page 序号匹配到 series 各项
+  const pagesByPage: Record<number, number> = {}
+  for (const p of (vd.pages || []) as Record<string, unknown>[]) {
+    const pageNum = Number(p.page) || 0
+    const dur = Number(p.duration) || 0
+    if (pageNum) pagesByPage[pageNum] = dur
+  }
+
   if (data.ugcSeason?.id) {
     season_id = data.ugcSeason.id
     series = {
       season_id: data.ugcSeason.id,
       title: data.ugcSeason.title || '',
-      videos: (data.ugcSeason.episodes || []).map((ep: Record<string, unknown>) => ({
-        bvid: ep.bvid,
-        title: ep.title || '',
-        description: '',
-        cover_url: ep.cover || '',
-        duration: ep.duration || 0,
-      })),
+      videos: (data.ugcSeason.episodes || []).map((ep: Record<string, unknown>, i: number) => {
+        const pageNum = Number(ep.page) || (i + 1)
+        return {
+          bvid: ep.bvid,
+          title: ep.title || '',
+          description: '',
+          cover_url: ep.cover || '',
+          page: pageNum,
+          duration: pagesByPage[pageNum] || 0,
+        }
+      }),
     }
   }
 
