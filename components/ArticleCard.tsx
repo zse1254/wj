@@ -10,16 +10,28 @@ const typeConfig: Record<string, { label: string; icon: string }> = {
   series: { label: '合集', icon: '📺' },
 }
 
+function getCover(article: Article): string {
+  if (article.cover_image) return article.cover_image
+  if (article.type === 'series') {
+    try {
+      const parsed = JSON.parse(article.content || '{}')
+      if (Array.isArray(parsed.videos) && parsed.videos[0]?.cover_url) return parsed.videos[0].cover_url
+    } catch {}
+  }
+  return ''
+}
+
 export default function ArticleCard({ article }: { article: Article }) {
   const href = `/${article.type}/${article.id}`
   const cfg = typeConfig[article.type] || { label: '未知', icon: '📄' }
+  const coverUrl = getCover(article)
 
   return (
     <Link href={href} className="group block bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-gray-200 hover:-translate-y-0.5">
-      {article.cover_image ? (
+      {coverUrl ? (
         <div className="relative aspect-video bg-gray-100 overflow-hidden">
           <img
-            src={article.cover_image}
+            src={coverUrl}
             alt={article.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"

@@ -30,7 +30,7 @@ export default function Header() {
     <header className="bg-gradient-to-r from-[#0d2b4a] to-[#1a4a7a] sticky top-0 z-50 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <span className="text-2xl font-extrabold tracking-tight drop-shadow-sm"><span className="text-[#f0c75e]">经济危机</span><span className="text-white">生存指南</span></span>
+          <span className="text-2xl font-extrabold tracking-tight drop-shadow-sm"><span className="text-white">经济危机</span><span className="text-[#f0c75e]">生存指南</span></span>
         </Link>
         <nav className="hidden md:flex items-center gap-1 text-sm">
           <Link href="/?type=article" className="text-[#f0c75e]/90 hover:text-[#f0c75e] px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors font-medium">文章</Link>
@@ -55,12 +55,7 @@ export default function Header() {
                 </div>
               )}
             </div>
-          ) : (
-            <>
-              <Link href="/login" className="text-sm text-[#f0c75e]/90 hover:text-[#f0c75e] transition-colors">登录</Link>
-              <Link href="/register" className="text-sm bg-[#f0c75e] text-[#0d2b4a] px-4 py-1.5 rounded-md hover:bg-[#d4a017] transition-colors font-medium">注册</Link>
-            </>
-          )}
+          ) : null}
         </div>
       </div>
     </header>
