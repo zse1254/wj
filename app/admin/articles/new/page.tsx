@@ -112,9 +112,11 @@ export default function NewArticlePage() {
         }
         setFetching(false)
         return
+      } else {
+        console.warn('Deno proxy response error:', denoData.error)
       }
-    } catch {
-      // fall through
+    } catch (e) {
+      console.warn('Deno proxy fetch failed:', e)
     }
 
     // 2) Client-side — try fetching Bilibili page through CORS proxies

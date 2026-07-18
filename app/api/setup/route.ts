@@ -29,13 +29,11 @@ export async function GET(request: Request) {
       description TEXT, created_at TEXT DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS articles (
-      id TEXT PRIMARY KEY, title TEXT NOT NULL,
-      slug TEXT UNIQUE NOT NULL, content TEXT, summary TEXT,
-      cover_url TEXT, type TEXT NOT NULL DEFAULT 'article',
-      category_id TEXT, author TEXT, source TEXT, source_url TEXT,
-      bilibili_url TEXT, audio_url TEXT, audio_duration INTEGER,
-      is_published INTEGER DEFAULT 0, is_featured INTEGER DEFAULT 0,
-      published_at TEXT, created_at TEXT DEFAULT (datetime('now')),
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '', cover_image TEXT, type TEXT NOT NULL DEFAULT 'article',
+      video_url TEXT, audio_url TEXT, bilibili_url TEXT, is_m3u8 INTEGER DEFAULT 0,
+      category_id TEXT, published INTEGER DEFAULT 0, author_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id)
     )`,
     `CREATE TABLE IF NOT EXISTS vip_cards (
@@ -51,6 +49,28 @@ export async function GET(request: Request) {
       log.push(`OK: ${sql.substring(0, 50)}...`)
     } catch (e: any) {
       log.push(`FAIL: ${e.message}`)
+    }
+  }
+
+  // Migrate existing tables: add missing columns for schema consistency
+  const migrations = [
+    "ALTER TABLE articles ADD COLUMN cover_image TEXT",
+    "ALTER TABLE articles ADD COLUMN video_url TEXT",
+    "ALTER TABLE articles ADD COLUMN is_m3u8 INTEGER DEFAULT 0",
+    "ALTER TABLE articles ADD COLUMN published INTEGER DEFAULT 0",
+    "ALTER TABLE articles ADD COLUMN author_id TEXT",
+    "ALTER TABLE articles ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
+    "ALTER TABLE articles ADD COLUMN content TEXT NOT NULL DEFAULT ''",
+  ]
+  for (const sql of migrations) {
+    try {
+      await db.prepare(sql).all()
+      log.push(`MIGRATE OK: ${sql}`)
+    } catch (e: any) {
+      // Ignore "duplicate column" errors — column already exists
+      if (!e.message?.includes('duplicate column')) {
+        log.push(`MIGRATE SKIP: ${e.message}`)
+      }
     }
   }
 
