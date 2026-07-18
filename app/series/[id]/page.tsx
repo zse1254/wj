@@ -55,9 +55,11 @@ export default function SeriesDetailPage() {
   // Listen for Bilibili player ended event
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'ended' && autoplay) {
-        playNext()
-      }
+      const raw = e.data
+      console.log('[series] postMessage:', raw)
+      const msg = typeof raw === 'string' ? (() => { try { return JSON.parse(raw) } catch { return null } })() : raw
+      if (msg?.type === 'ended' && autoplay) { playNext(); return }
+      if (msg?.event === 'ended' && autoplay) { playNext(); return }
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
