@@ -36,6 +36,7 @@ export default function VideoDetailPage() {
   )
 
   const bvid = article.bilibili_url ? extractBilibiliBvid(article.bilibili_url) : null
+  const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
   return (
     <>
@@ -46,7 +47,7 @@ export default function VideoDetailPage() {
         {bvid ? (
           <div className="bilibili-player rounded-xl overflow-hidden mb-6 bg-black">
             <iframe
-              src={`https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0&danmaku=0`}
+              src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0`}
               scrolling="no"
               frameBorder="0"
               allowFullScreen

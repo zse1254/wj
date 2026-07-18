@@ -265,7 +265,7 @@ export default function NewArticlePage() {
             cover_image: v.cover_url,
             video_url: '',
             audio_url: '',
-            bilibili_url: `https://www.bilibili.com/video/${v.bvid}`,
+            bilibili_url: `https://www.bilibili.com/video/${v.bvid}${(v as any).page ? `?p=${(v as any).page}` : ''}`,
             is_m3u8: false,
             category_id: form.category_id,
             published: form.published,
@@ -390,7 +390,7 @@ export default function NewArticlePage() {
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <button type="button" onClick={() => {
-              const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url })) })
+              const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: (v as any).page })) })
               setForm(f => ({
                 ...f,
                 type: 'series',
