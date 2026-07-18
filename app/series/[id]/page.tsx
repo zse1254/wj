@@ -120,6 +120,13 @@ export default function SeriesDetailPage() {
       <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
         <Link href="/" className="text-sm text-gray-500 hover:text-[#1a73e8] mb-4 inline-block">&larr; 返回首页</Link>
 
+        {article.cover_image && (
+          <div className="relative aspect-[2.4/1] rounded-xl overflow-hidden mb-6 bg-gray-100">
+            <img src={article.cover_image} alt={article.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+          </div>
+        )}
+
         <h1 className="text-xl font-bold mb-1">{article.title}</h1>
         {article.category_name && (
           <div className="flex items-center gap-3 text-sm text-gray-500 mb-4">
