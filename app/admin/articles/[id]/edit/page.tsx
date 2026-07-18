@@ -49,6 +49,7 @@ export default function EditArticlePage() {
         summary: f.summary || v.description || '',
         cover_image: f.cover_image || v.cover_url || '',
       }))
+      setFetching(false)
     }
 
     // 1) Server-side
