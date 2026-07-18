@@ -159,7 +159,7 @@ export default function EditArticlePage() {
           </div>
         </div>
 
-        {form.type === 'video' && (
+        {(form.type === 'video' || form.type === 'series') && (
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
             <div>
               <label className="block text-sm font-medium mb-1">Bilibili 链接</label>
