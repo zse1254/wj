@@ -26,12 +26,19 @@ export default function SeriesDetailPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [durations, setDurations] = useState<Record<string, number>>({})
 
-  // Prevent Bilibili player from navigating away
+  // Prevent Bilibili navigation + auto-advance when video ends
+  const navBlockedRef = useRef(false)
   useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      if (autoplay && currentIndex < videos.length - 1 && !navBlockedRef.current) {
+        navBlockedRef.current = true
+        setTimeout(() => { navBlockedRef.current = false; playNext() }, 500)
+      }
+    }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [])
+  }, [currentIndex, autoplay, videos.length])
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -45,37 +52,32 @@ export default function SeriesDetailPage() {
     }).finally(() => setLoading(false))
   }, [params.id])
 
-  // Fetch durations for all videos via Deno proxy
+  // Fallback: fetch durations and auto-advance if beforeunload doesn't fire
   useEffect(() => {
     if (videos.length === 0) return
-    const fetchDurations = async () => {
-      const map: Record<string, number> = { ...durations }
+    ;(async () => {
       for (const v of videos) {
-        if (map[v.bvid]) continue
+        if (durations[v.bvid]) continue
         try {
           const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: `https://www.bilibili.com/video/${v.bvid}` }),
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(8000),
           })
           const data = await res.json()
           if (data.success && data.data?.video?.duration) {
-            map[v.bvid] = data.data.video.duration
+            setDurations(prev => ({ ...prev, [v.bvid]: data.data.video.duration }))
           }
         } catch {}
       }
-      console.log('[series] durations:', map)
-      setDurations(map)
-    }
-    fetchDurations()
+    })()
   }, [videos.length])
 
-  // Duration-based auto-advance timer
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
     if (!autoplay || !currentVideo) return
     const dur = durations[currentBvid || '']
-    if (!dur) return
+    if (!dur || dur > 7200) return // skip if >2h (likely wrong)
     timerRef.current = setTimeout(() => { playNext() }, (dur + 2) * 1000)
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [currentIndex, autoplay, durations])
