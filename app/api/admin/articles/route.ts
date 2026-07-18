@@ -31,15 +31,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let body: any, id: string, admin: any
   try {
-    const admin = await requireAdmin()
-    const body = await request.json()
+    admin = await requireAdmin()
+    body = await request.json()
 
     if (!body.title || !body.type) {
       return Response.json({ success: false, error: 'Title and type are required' }, { status: 400 })
     }
 
-    const id = uuidv4()
+    id = uuidv4()
     await execute(
       `INSERT INTO articles (id, title, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
           try { await execute(sql) } catch {}
         }
         // Retry the insert
+        id = uuidv4()
         await execute(
           `INSERT INTO articles (id, title, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
