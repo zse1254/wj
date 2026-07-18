@@ -18,7 +18,7 @@ export default function NewArticlePage() {
     title: '',
     summary: '',
     content: '',
-    type: 'article',
+    type: 'video',
     cover_image: '',
     video_url: '',
     audio_url: '',

@@ -10,7 +10,7 @@ export default function EditArticlePage() {
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([])
   const [form, setForm] = useState({
-    title: '', summary: '', content: '', type: 'article',
+    title: '', summary: '', content: '', type: 'video',
     cover_image: '', video_url: '', audio_url: '', bilibili_url: '',
     is_m3u8: false, category_id: '', published: true,
   })
