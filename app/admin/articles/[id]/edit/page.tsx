@@ -59,17 +59,21 @@ export default function EditArticlePage() {
       })
       const data = await res.json()
       if (data.success) { fill(data.data.video); return }
-    } catch {}
+      console.warn('Server endpoint failed:', res.status, data)
+    } catch (e) { console.warn('Server endpoint error:', e) }
 
     // 2) Deno Deploy proxy
     try {
+      console.log('Trying Deno proxy...')
       const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
         signal: AbortSignal.timeout(15000),
       })
+      console.log('Deno proxy response:', denoRes.status)
       const denoData = await denoRes.json()
+      console.log('Deno proxy data:', denoData)
       if (denoData.success) { fill(denoData.data.video); return }
-    } catch {}
+    } catch (e) { console.warn('Deno proxy error:', e) }
 
     setFetchError('Bilibili page error: 412')
     setFetching(false)
