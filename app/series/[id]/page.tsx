@@ -24,39 +24,10 @@ export default function SeriesDetailPage() {
   const [played, setPlayed] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestedBvidsRef = useRef<Set<string>>(new Set())
   const [durations, setDurations] = useState<Record<string, number>>({})
-
-  // Listen ALL postMessage from Bilibili to find ended event
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (!e.origin?.includes('bilibili.com')) return
-      console.log('[Bili msg]', JSON.stringify(e.data).slice(0, 200))
-      if (autoplay && currentIndex < videos.length - 1) {
-        const raw = e.data
-        const msg = typeof raw === 'string' ? (() => { try { return JSON.parse(raw) } catch { return null } })() : raw
-        if (msg && (msg.type === 'ended' || msg.event === 'ended' || msg.state === 'ended')) {
-          console.log('[Bili msg] -> playNext!')
-          playNext()
-        }
-      }
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [currentIndex, autoplay, videos.length])
-
-  // beforeunload fallback
-  const navBlockedRef = useRef(false)
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      if (autoplay && currentIndex < videos.length - 1 && !navBlockedRef.current) {
-        navBlockedRef.current = true
-        setTimeout(() => { navBlockedRef.current = false; playNext() }, 500)
-      }
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [currentIndex, autoplay, videos.length])
+  const [remaining, setRemaining] = useState<number | null>(null)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -70,35 +41,38 @@ export default function SeriesDetailPage() {
     }).finally(() => setLoading(false))
   }, [params.id])
 
-  // Fallback: fetch durations and auto-advance if beforeunload doesn't fire
+  // Fetch durations per bvid, then split total by how many episodes share that bvid
   useEffect(() => {
     if (videos.length === 0) return
     ;(async () => {
-      for (const v of videos) {
-        if (durations[v.bvid]) continue
+      const bvids = Array.from(new Set(videos.map(v => v.bvid)))
+      const totalByBvid: Record<string, number> = {}
+      for (const bvid of bvids) {
+        if (requestedBvidsRef.current.has(bvid)) continue
+        requestedBvidsRef.current.add(bvid)
         try {
           const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: `https://www.bilibili.com/video/${v.bvid}` }),
+            body: JSON.stringify({ url: `https://www.bilibili.com/video/${bvid}` }),
             signal: AbortSignal.timeout(8000),
           })
           const data = await res.json()
           if (data.success && data.data?.video?.duration) {
-            setDurations(prev => ({ ...prev, [v.bvid]: data.data.video.duration }))
+            totalByBvid[bvid] = data.data.video.duration
           }
         } catch {}
       }
+      if (Object.keys(totalByBvid).length === 0) return
+      setDurations(prev => {
+        const next = { ...prev }
+        for (const [bvid, total] of Object.entries(totalByBvid)) {
+          const count = videos.filter(v => v.bvid === bvid).length
+          next[bvid] = Math.max(30, Math.round(total / count))
+        }
+        return next
+      })
     })()
-  }, [videos.length])
-
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    if (!autoplay || !currentVideo) return
-    const dur = durations[currentBvid || '']
-    if (!dur) return
-    timerRef.current = setTimeout(() => { playNext() }, (dur + 2) * 1000)
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [currentIndex, autoplay, durations])
+  }, [videos])
 
   // Restore playback position
   useEffect(() => {
@@ -106,7 +80,7 @@ export default function SeriesDetailPage() {
     const key = `series_${article.id}`
     try {
       const saved = JSON.parse(localStorage.getItem(key) || '{}')
-      if (typeof saved.index === 'number') setCurrentIndex(saved.index)
+      if (typeof saved.index === 'number') queueMicrotask(() => setCurrentIndex(saved.index))
     } catch {}
   }, [article])
 
@@ -142,12 +116,64 @@ export default function SeriesDetailPage() {
     }
   }
 
+  // Listen ALL postMessage from Bilibili to find ended event
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (!e.origin?.includes('bilibili.com')) return
+      console.log('[Bili msg]', JSON.stringify(e.data).slice(0, 200))
+      if (autoplay && currentIndex < videos.length - 1) {
+        const raw = e.data
+        const msg = typeof raw === 'string' ? (() => { try { return JSON.parse(raw) } catch { return null } })() : raw
+        if (msg && (msg.type === 'ended' || msg.event === 'ended' || msg.state === 'ended')) {
+          console.log('[Bili msg] -> playNext!')
+          playNext()
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [currentIndex, autoplay, videos.length, playNext])
+
+  // beforeunload fallback
+  const navBlockedRef = useRef(false)
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      if (autoplay && currentIndex < videos.length - 1 && !navBlockedRef.current) {
+        navBlockedRef.current = true
+        setTimeout(() => { navBlockedRef.current = false; playNext() }, 500)
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [currentIndex, autoplay, videos.length, playNext])
+
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
   const currentEmbedUrl = currentBvid
     ? `https://player.bilibili.com/player.html?bvid=${currentBvid}&p=${currentPage}&high_quality=1&autoplay=1&danmaku=0`
     : ''
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    if (!autoplay || !currentVideo) { queueMicrotask(() => setRemaining(null)); return }
+    const dur = durations[currentBvid || '']
+    if (!dur) { queueMicrotask(() => setRemaining(null)); return }
+    const total = (dur + 5) * 1000
+    const start = Date.now()
+    queueMicrotask(() => setRemaining(Math.ceil(total / 1000)))
+    intervalRef.current = setInterval(() => {
+      const left = Math.ceil((total - (Date.now() - start)) / 1000)
+      setRemaining(left > 0 ? left : 0)
+    }, 1000)
+    timerRef.current = setTimeout(() => { playNext() }, total)
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [currentIndex, autoplay, durations, currentBvid, currentVideo, playNext])
 
   if (loading) return (
     <>
@@ -221,6 +247,12 @@ export default function SeriesDetailPage() {
                 自动连播
               </label>
             </div>
+
+            {autoplay && remaining != null && (
+              <p className="text-xs text-amber-600 mb-4">
+                本集约 {remaining} 秒后自动连播下一集{remaining <= 8 ? '…' : ''}
+              </p>
+            )}
 
             {currentVideo && (
               <>
