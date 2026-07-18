@@ -222,7 +222,7 @@ export default function EditArticlePage() {
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <button type="button" onClick={() => {
             const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page })) })
-            setForm(f => ({ ...f, type: 'series', content: videosJson }))
+            setForm(f => ({ ...f, type: 'series', content: videosJson, cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '' }))
           }}
             className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">
             📺 保存为合集
