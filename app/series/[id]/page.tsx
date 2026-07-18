@@ -57,6 +57,7 @@ export default function SeriesDetailPage() {
           }
         } catch {}
       }
+      console.log('[series] durations:', map)
       setDurations(map)
     }
     fetchDurations()
@@ -164,6 +165,7 @@ export default function SeriesDetailPage() {
                 frameBorder="0"
                 allowFullScreen
                 allow="autoplay"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
                 style={{
                   position: 'absolute',
                   top: 0,
