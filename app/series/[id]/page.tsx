@@ -144,19 +144,15 @@ export default function SeriesDetailPage() {
     return () => window.removeEventListener('message', handler)
   }, [currentIndex, autoplay, videos.length, playNext])
 
-  // beforeunload fallback
-  const navBlockedRef = useRef(false)
+  // beforeunload: do NOT advance episode on refresh/navigation.
+  // (Previously this called playNext, causing a refresh to skip to the next episode.)
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault()
-      if (autoplay && currentIndex < videos.length - 1 && !navBlockedRef.current) {
-        navBlockedRef.current = true
-        setTimeout(() => { navBlockedRef.current = false; playNext() }, 500)
-      }
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [currentIndex, autoplay, videos.length, playNext])
+  }, [])
 
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
