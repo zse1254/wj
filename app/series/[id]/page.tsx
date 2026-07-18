@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -23,6 +23,8 @@ export default function SeriesDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [played, setPlayed] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [durations, setDurations] = useState<Record<string, number>>({})
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -35,6 +37,40 @@ export default function SeriesDetailPage() {
       }
     }).finally(() => setLoading(false))
   }, [params.id])
+
+  // Fetch durations for all videos via Deno proxy
+  useEffect(() => {
+    if (videos.length === 0) return
+    const fetchDurations = async () => {
+      const map: Record<string, number> = { ...durations }
+      for (const v of videos) {
+        if (map[v.bvid]) continue
+        try {
+          const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: `https://www.bilibili.com/video/${v.bvid}` }),
+            signal: AbortSignal.timeout(10000),
+          })
+          const data = await res.json()
+          if (data.success && data.data?.video?.duration) {
+            map[v.bvid] = data.data.video.duration
+          }
+        } catch {}
+      }
+      setDurations(map)
+    }
+    fetchDurations()
+  }, [videos.length])
+
+  // Duration-based auto-advance timer
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!autoplay || !currentVideo) return
+    const dur = durations[currentBvid || '']
+    if (!dur) return
+    timerRef.current = setTimeout(() => { playNext() }, (dur + 2) * 1000)
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [currentIndex, autoplay, durations])
 
   // Restore playback position
   useEffect(() => {
@@ -51,19 +87,6 @@ export default function SeriesDetailPage() {
     const key = `series_${article.id}`
     localStorage.setItem(key, JSON.stringify({ index: idx, updated_at: Date.now() }))
   }, [article])
-
-  // Listen for Bilibili player ended event
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      const raw = e.data
-      console.log('[series] postMessage:', raw)
-      const msg = typeof raw === 'string' ? (() => { try { return JSON.parse(raw) } catch { return null } })() : raw
-      if (msg?.type === 'ended' && autoplay) { playNext(); return }
-      if (msg?.event === 'ended' && autoplay) { playNext(); return }
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [currentIndex, autoplay, videos.length])
 
   const playNext = useCallback(() => {
     if (currentIndex < videos.length - 1) {
