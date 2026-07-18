@@ -26,6 +26,13 @@ export default function SeriesDetailPage() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [durations, setDurations] = useState<Record<string, number>>({})
 
+  // Prevent Bilibili player from navigating away
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
       if (res.success) {
@@ -165,7 +172,7 @@ export default function SeriesDetailPage() {
                 frameBorder="0"
                 allowFullScreen
                 allow="autoplay"
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
                 style={{
                   position: 'absolute',
                   top: 0,
