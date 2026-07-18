@@ -230,7 +230,7 @@ export default function EditArticlePage() {
           <div className="max-h-60 overflow-y-auto space-y-2 mt-3">
             {seriesInfo.videos.map((v, i) => (
               <div key={v.bvid + (v.page || '')} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
-                {v.cover_url && <img src={v.cover_url} alt="" className="w-14 h-9 object-cover rounded shrink-0" />}
+                {v.cover_url && <img src={v.cover_url} alt="" className="w-14 h-9 object-cover rounded shrink-0" referrerPolicy="no-referrer" />}
                 <span className="text-sm truncate">{i + 1}. {v.title}</span>
               </div>
             ))}

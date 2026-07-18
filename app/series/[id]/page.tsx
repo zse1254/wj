@@ -124,7 +124,7 @@ export default function SeriesDetailPage() {
           const coverUrl = article.cover_image || videos[0]?.cover_url || ''
           return coverUrl ? (
             <div className="relative aspect-[2.4/1] rounded-xl overflow-hidden mb-6 bg-gray-100">
-              <img src={coverUrl} alt={article.title} className="w-full h-full object-cover" />
+              <img src={coverUrl} alt={article.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
             </div>
           ) : null
@@ -210,7 +210,7 @@ export default function SeriesDetailPage() {
                       {i === currentIndex ? '▶' : i + 1}
                     </span>
                     {v.cover_url && (
-                      <img src={v.cover_url} alt="" className="w-14 h-9 object-cover rounded shrink-0" />
+                      <img src={v.cover_url} alt="" className="w-14 h-9 object-cover rounded shrink-0" referrerPolicy="no-referrer" />
                     )}
                     <span className={`text-sm line-clamp-2 ${
                       i === currentIndex ? 'font-medium text-[#1a73e8]' : 'text-gray-700'

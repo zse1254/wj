@@ -424,7 +424,7 @@ export default function NewArticlePage() {
             {seriesInfo.videos.map((v, i) => (
               <label key={v.bvid} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={selectedVideos.has(i)} onChange={() => toggleVideo(i)} />
-                <img src={v.cover_url} alt="" className="w-16 h-10 object-cover rounded shrink-0" />
+                <img src={v.cover_url} alt="" className="w-16 h-10 object-cover rounded shrink-0" referrerPolicy="no-referrer" />
                 <span className="text-sm truncate">{v.title}</span>
               </label>
             ))}
