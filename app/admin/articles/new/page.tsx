@@ -28,6 +28,7 @@ export default function NewArticlePage() {
     published: true,
   })
   const [fetching, setFetching] = useState(false)
+  const [fetchAutoFailed, setFetchAutoFailed] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
   const [selectedVideos, setSelectedVideos] = useState<Set<number>>(new Set())
@@ -43,6 +44,7 @@ export default function NewArticlePage() {
 
   const fetchBilibiliInfo = useCallback(async (url: string) => {
     setFetchError('')
+    setFetchAutoFailed(false)
     setSeriesInfo(null)
     setSelectedVideos(new Set())
     if (!url || !url.includes('bilibili')) return
@@ -59,6 +61,7 @@ export default function NewArticlePage() {
       }))
     }
 
+    // 1) Server-side via Cloudflare Workers (enhanced headers)
     try {
       const res = await fetch('/api/admin/bilibili', {
         method: 'POST',
@@ -76,29 +79,33 @@ export default function NewArticlePage() {
           })
           setSelectedVideos(new Set(data.data.series.videos.map((_: unknown, i: number) => i)))
         }
+        setFetching(false)
         return
       }
-      // Server failed (likely 412 from Cloudflare → Bilibili blocks Worker IPs)
-      // Fall through to client-side CORS proxy
     } catch {
-      // Fall through to client-side CORS proxy
+      // fall through
     }
 
-    // Client-side fallback: fetch Bilibili page via CORS proxy (uses user's IP)
     if (!bvid) {
       setFetchError('无法识别 Bilibili 链接格式')
       setFetching(false)
       return
     }
 
+    // 2) Client-side — try fetching Bilibili page through CORS proxies
+    //    (uses the user's browser IP, bypassing Cloudflare's blocked IPs)
+    const pageUrl = `https://www.bilibili.com/video/${bvid}`
+    const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
     const proxies = [
+      // Generic CORS proxies
       (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      // China-friendly mirrors
+      (u: string) => `https://api.allorigins.cn/raw?url=${encodeURIComponent(u)}`,
     ]
 
     for (const buildProxy of proxies) {
       try {
-        const pageUrl = `https://www.bilibili.com/video/${bvid}`
         const proxyRes = await fetch(buildProxy(pageUrl), { signal: AbortSignal.timeout(8000) })
         if (!proxyRes.ok) continue
         const html = await proxyRes.text()
@@ -118,7 +125,59 @@ export default function NewArticlePage() {
       }
     }
 
-    setFetchError('获取失败（Bilibili 屏蔽了服务器请求）')
+    // 3) Final attempt: direct browser fetch to Bilibili API (may be CORS-blocked,
+    //    but some environments may allow it)
+    try {
+      const corsRes = await fetch(apiUrl, {
+        mode: 'cors',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://www.bilibili.com',
+        },
+      })
+      if (corsRes.ok) {
+        const json = await corsRes.json()
+        if (json.code === 0 && json.data) {
+          fillForm({
+            title: json.data.title || '',
+            description: (json.data.desc || '').slice(0, 500),
+            cover_url: json.data.pic || '',
+          })
+          if (json.data.ugc_season?.id) {
+            ;(async () => {
+              const sRes = await fetch(`https://api.bilibili.com/x/web-interface/season/season?season_id=${json.data.ugc_season.id}`, {
+                mode: 'cors',
+                headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.bilibili.com' },
+              })
+              if (sRes.ok) {
+                const sJson = await sRes.json()
+                if (sJson.code === 0 && sJson.data?.episodes) {
+                  const videos = sJson.data.episodes.map((ep: Record<string, unknown>) => ({
+                    bvid: ep.bvid as string,
+                    title: (ep.title as string) || '',
+                    cover_url: (ep.cover as string) || '',
+                  }))
+                  setSeriesInfo({ title: sJson.data.title || '', videos })
+                  setSelectedVideos(new Set(videos.map((_: unknown, i: number) => i)))
+                }
+              }
+            })()
+          }
+          setFetching(false)
+          return
+        }
+      }
+    } catch {
+      // fall through
+    }
+
+    // All attempts failed — auto-fill what we can (BVID, embed URL)
+    setForm(f => ({
+      ...f,
+      bilibili_url: url,
+    }))
+    setFetchError('')
+    setFetchAutoFailed(true)
     setFetching(false)
   }, [])
 
@@ -248,6 +307,9 @@ export default function NewArticlePage() {
                 {fetching && <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mt-2.5" />}
               </div>
               {fetchError && <p className="text-red-500 text-xs mt-1">{fetchError}</p>}
+              {fetchAutoFailed && !fetchError && !fetching && (
+                <p className="text-yellow-600 text-xs mt-1">Bilibili 服务器封锁了自动获取，请手动填写标题、摘要和封面图</p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <div className="flex-1">
