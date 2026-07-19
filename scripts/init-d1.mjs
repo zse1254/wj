@@ -25,9 +25,9 @@ console.log("=== Creating tables ===");
 
 const tables = [
   `CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL,
+    id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE,
     password_hash TEXT NOT NULL, is_admin INTEGER DEFAULT 0, is_vip INTEGER DEFAULT 0,
-    vip_expires_at TEXT, created_at TEXT DEFAULT (datetime('now'))
+    vip_expires_at TEXT, invited_by TEXT, created_at TEXT DEFAULT (datetime('now'))
   );`,
   `CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT (datetime('now'))
@@ -45,6 +45,16 @@ const tables = [
     is_used INTEGER DEFAULT 0, used_by TEXT, used_at TEXT, created_by TEXT,
     created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (used_by) REFERENCES users(id)
   );`,
+  `CREATE TABLE IF NOT EXISTS invite_codes (
+    id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL,
+    max_uses INTEGER NOT NULL DEFAULT 1, used_count INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1, note TEXT,
+    created_by TEXT, created_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT
+  );`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY, value TEXT
+  );`,
 ];
 
 for (const sql of tables) {
@@ -53,6 +63,30 @@ for (const sql of tables) {
   run(tmpFile);
   try { unlinkSync(tmpFile); } catch {}
 }
+
+console.log("\n=== Migrating users table (email optional, invited_by) ===");
+const migSql = `
+ALTER TABLE users RENAME TO users_old;
+CREATE TABLE users (
+  id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE,
+  password_hash TEXT NOT NULL, is_admin INTEGER DEFAULT 0, is_vip INTEGER DEFAULT 0,
+  vip_expires_at TEXT, invited_by TEXT, created_at TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO users (id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at)
+  SELECT id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at FROM users_old;
+DROP TABLE users_old;
+`;
+const migFile = `tmp_mig_${Date.now()}.sql`;
+writeFileSync(migFile, migSql, "utf8");
+run(migFile);
+try { unlinkSync(migFile); } catch {}
+
+console.log("\n=== Seeding settings ===");
+const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0');`;
+const setFile = `tmp_set_${Date.now()}.sql`;
+writeFileSync(setFile, setSql, "utf8");
+run(setFile);
+try { unlinkSync(setFile); } catch {}
 
 console.log("\n=== Seeding admin user ===");
 
