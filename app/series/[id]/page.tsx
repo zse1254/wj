@@ -265,7 +265,7 @@ export default function SeriesDetailPage() {
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
   const currentEmbedUrl = currentBvid
-    ? `https://player.bilibili.com/player.html?bvid=${currentBvid}&p=${currentPage}&high_quality=1&autoplay=1&danmaku=0`
+    ? `/api/player-proxy?bvid=${currentBvid}&p=${currentPage}`
     : ''
 
   useEffect(() => {
