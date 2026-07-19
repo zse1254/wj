@@ -36,6 +36,14 @@ export default function EditArticlePage() {
           category_id: a.category_id || '', published: Boolean(a.published),
           category_ids: Array.isArray(a.category_ids) ? a.category_ids : [],
         })
+        if (a.type === 'series' && a.content) {
+          try {
+            const parsed = JSON.parse(a.content)
+            if (Array.isArray(parsed.videos) && parsed.videos.length > 0) {
+              setSeriesInfo({ title: a.title || parsed.title || '', videos: parsed.videos })
+            }
+          } catch {}
+        }
       }
     }).finally(() => setLoading(false))
   }, [params.id])

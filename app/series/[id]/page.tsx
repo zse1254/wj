@@ -35,18 +35,23 @@ export default function SeriesDetailPage() {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
       if (res.success) {
         setArticle(res.data)
+        let list: SeriesVideo[] = []
         try {
           const parsed = JSON.parse(res.data.content || '{}')
-          if (Array.isArray(parsed.videos)) {
-            setVideos(parsed.videos)
-            const preset: Record<number, number> = {}
-            parsed.videos.forEach((v: SeriesVideo, i: number) => {
-              if (typeof v.duration === 'number' && v.duration > 0) preset[i] = v.duration
-            })
-            console.log('[Series] article videos durations:', (parsed.videos as SeriesVideo[]).map((v: SeriesVideo) => v.duration))
-            if (Object.keys(preset).length > 0) setDurations(preset)
-          }
+          if (Array.isArray(parsed.videos)) list = parsed.videos
         } catch {}
+        if (list.length === 0 && res.data.bilibili_url) {
+          const bvid = res.data.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0] || ''
+          list = [{ bvid, title: res.data.title || '视频', cover_url: res.data.cover_image || '' }]
+        }
+        if (list.length > 0) {
+          setVideos(list)
+          const preset: Record<number, number> = {}
+          list.forEach((v: SeriesVideo, i: number) => {
+            if (typeof v.duration === 'number' && v.duration > 0) preset[i] = v.duration
+          })
+          if (Object.keys(preset).length > 0) setDurations(preset)
+        }
       }
     }).finally(() => setLoading(false))
   }, [params.id])
