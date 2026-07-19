@@ -218,9 +218,6 @@ export default function EditArticlePage() {
     }
   }
 
-  const topCategories = categories.filter(c => !c.parent_id)
-  const childOf = (pid: string | null) => categories.filter(c => c.parent_id === pid)
-
   if (loading) return <div className="flex items-center justify-center py-20"><div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
 
   return (
@@ -262,48 +259,32 @@ export default function EditArticlePage() {
             <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
               className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none">
               <option value="">无分类</option>
-              {topCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium mb-1">所属分类（可多选）</label>
-          <div className="flex flex-col gap-3">
-            {topCategories.map(parent => (
-              <div key={parent.id}>
-                <p className="text-xs text-gray-400 mb-1.5 font-medium">{parent.name}</p>
-                <div className="flex flex-wrap gap-2">
-                  {childOf(parent.id).map(c => {
-                    const checked = form.category_ids.includes(c.id)
-                    return (
-                      <button type="button" key={c.id}
-                        onClick={() => setForm(f => ({
-                          ...f,
-                          category_ids: checked ? f.category_ids.filter(x => x !== c.id) : [...f.category_ids, c.id],
-                        }))}
-                        className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                          checked ? 'bg-[#1a73e8] text-white border-[#1a73e8]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                        }`}>
-                        {c.name}
-                      </button>
-                    )
-                  })}
-                  {childOf(parent.id).length === 0 && <span className="text-xs text-gray-300">（无子分类）</span>}
-                </div>
-              </div>
-            ))}
-            {topCategories.length === 0 && <span className="text-sm text-gray-400">暂无可选分类</span>}
+          <div className="flex flex-wrap gap-2">
+            {categories.map(c => {
+              const checked = form.category_ids.includes(c.id)
+              return (
+                <button type="button" key={c.id}
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    category_ids: checked ? f.category_ids.filter(x => x !== c.id) : [...f.category_ids, c.id],
+                  }))}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    checked ? 'bg-[#1a73e8] text-white border-[#1a73e8]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}>
+                  {c.parent_id ? `└ ${c.name}` : c.name}
+                </button>
+              )
+            })}
+            {categories.length === 0 && <span className="text-sm text-gray-400">暂无可选分类</span>}
           </div>
         </div>
-
-        {form.type === 'series' && (
-          <div>
-            <label className="block text-sm font-medium mb-1">合集原始内容</label>
-            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
-              className="w-full px-3 py-2 border rounded-lg font-mono text-xs resize-none" rows={3} />
-          </div>
-        )}
 
         {(form.type === 'video' || form.type === 'series') && (
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
