@@ -297,6 +297,14 @@ export default function EditArticlePage() {
           </div>
         </div>
 
+        {form.type === 'series' && (
+          <div>
+            <label className="block text-sm font-medium mb-1">合集原始内容</label>
+            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg font-mono text-xs resize-none" rows={3} />
+          </div>
+        )}
+
         {(form.type === 'video' || form.type === 'series') && (
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
             <div>
@@ -345,6 +353,22 @@ export default function EditArticlePage() {
             已发布
           </label>
           <div className="flex gap-3 ml-auto">
+            {form.type === 'series' && form.bilibili_url && (
+              <button type="button" onClick={() => {
+                if (!confirm('从 B 站重新抓取合集数据，替换当前内容？')) return
+                fetch(`/api/admin/articles/${params.id}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...form, content: '' }),
+                }).then(r => r.json()).then(res => {
+                  if (res.success) { alert('已修复，刷新页面'); location.reload() }
+                  else alert(res.error || '修复失败')
+                })
+              }}
+                className="text-sm text-amber-600 hover:underline px-2">
+                🔄 修复合集
+              </button>
+            )}
             <button type="button" onClick={() => router.back()} className="px-4 py-2 border rounded-lg text-sm">取消</button>
             <button type="submit" disabled={saving}
               className="bg-[#1a73e8] text-white px-6 py-2 rounded-lg text-sm hover:bg-[#1557b0] disabled:opacity-50">
@@ -359,11 +383,13 @@ export default function EditArticlePage() {
           <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <button type="button" onClick={() => {
-            // Preserve existing durations from content if fetched series lacks them
+            if (!seriesInfo || !Array.isArray(seriesInfo.videos)) { alert('合集数据无效'); return }
+            const valid = seriesInfo.videos.filter(v => v && v.bvid)
+            if (valid.length === 0) { alert('合集无有效视频'); return }
             let existingDurations: Record<string, number> = {}
             try { const c = JSON.parse(form.content || '{}'); if (Array.isArray(c.videos)) { c.videos.forEach((v: any, i: number) => { if (v.duration) existingDurations[i] = v.duration }) } } catch {}
-            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map((v, i) => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration || existingDurations[i] || undefined })) })
-            setForm(f => ({ ...f, type: 'series', content: videosJson, cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '' }))
+            const videosJson = JSON.stringify({ videos: valid.map((v, i) => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration || existingDurations[i] || undefined })) })
+            setForm(f => ({ ...f, type: 'series', content: videosJson, cover_image: f.cover_image || valid[0]?.cover_url || '' }))
           }}
             className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">
             📺 保存为合集

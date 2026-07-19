@@ -69,6 +69,45 @@ async function syncCategories(articleId: string, categoryIds: unknown) {
   }
 }
 
+async function ensureSeriesContent(body: any) {
+  if (body.type !== 'series') return body
+  if (body.content && typeof body.content === 'string') {
+    try {
+      const parsed = JSON.parse(body.content)
+      if (Array.isArray(parsed.videos) && parsed.videos.length > 0) return body
+    } catch {}
+  }
+  // content 为空或无效 → 尝试通过 bilibili_url 重建
+  const url = body.bilibili_url
+  if (!url) return body
+  try {
+    const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
+      signal: AbortSignal.timeout(10000),
+    })
+    const data = await res.json()
+    if (data.success && Array.isArray(data.data?.series?.videos) && data.data.series.videos.length > 0) {
+      const videos = data.data.series.videos.map((v: any) => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration }))
+      body.content = JSON.stringify({ videos })
+    }
+  } catch {}
+  return body
+}
+
+async function doInsert(body: any, admin: any, id: string) {
+  const slug = `${slugify(body.title)}-${Date.now()}`
+  await execute(
+    `INSERT INTO articles (id, title, slug, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id, body.title, slug, body.content || '', body.summary || '', body.cover_image || null,
+      body.type, body.video_url || null, body.audio_url || null, body.bilibili_url || null,
+      body.is_m3u8 ? 1 : 0, body.category_id || null, body.published ? 1 : 0, admin.userId,
+    ]
+  )
+  await syncCategories(id, body.category_ids)
+}
+
 export async function POST(request: NextRequest) {
   let body: any, id: string, admin: any
   try {
@@ -80,39 +119,20 @@ export async function POST(request: NextRequest) {
       return Response.json({ success: false, error: 'Title and type are required' }, { status: 400 })
     }
 
+    body = await ensureSeriesContent(body)
     id = uuidv4()
-    const slug = `${slugify(body.title)}-${Date.now()}`
-    await execute(
-      `INSERT INTO articles (id, title, slug, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id, body.title, slug, body.content || '', body.summary || '', body.cover_image || null,
-        body.type, body.video_url || null, body.audio_url || null, body.bilibili_url || null,
-        body.is_m3u8 ? 1 : 0, body.category_id || null, body.published ? 1 : 0, admin.userId,
-      ]
-    )
-    await syncCategories(id, body.category_ids)
+    await doInsert(body, admin, id)
 
     return Response.json({ success: true, data: { id } }, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'
-    // Auto-migrate + retry as last resort
     if (msg?.includes('has no column named')) {
       try {
         await ensureColumns()
         id = uuidv4()
-        const retrySlug = `${slugify(body?.title || 'post')}-${Date.now()}`
         const d1 = (globalThis as any)[Symbol.for('__cloudflare-context__')]?.env?.DB || (process as any).env?.DB
         if (d1) {
-          await d1.prepare(
-            `INSERT INTO articles (id, title, slug, content, summary, cover_image, type, video_url, audio_url, bilibili_url, is_m3u8, category_id, published, author_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).bind(
-            id, body?.title || '', retrySlug, body?.content || '', body?.summary || '', body?.cover_image || null,
-            body?.type || 'video', body?.video_url || null, body?.audio_url || null, body?.bilibili_url || null,
-            body?.is_m3u8 ? 1 : 0, body?.category_id || null, body?.published ? 1 : 0, admin?.userId || '',
-           ).all()
-          await syncCategories(id, body?.category_ids)
+          await doInsert(body || {}, admin || { userId: '' }, id)
           return Response.json({ success: true, data: { id } }, { status: 201 })
         }
       } catch {}

@@ -360,6 +360,14 @@ export default function NewArticlePage() {
           </div>
         </div>
 
+        {form.type === 'series' && form.content && (
+          <div>
+            <label className="block text-sm font-medium mb-1">合集内容（JSON，自动生成）</label>
+            <textarea readOnly value={form.content}
+              className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-xs font-mono text-gray-500 resize-none" rows={3} />
+          </div>
+        )}
+
         {(form.type === 'video' || form.type === 'series') && (
           <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
             <div>
@@ -426,12 +434,15 @@ export default function NewArticlePage() {
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <button type="button" onClick={() => {
-              const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration })) })
+              if (!seriesInfo || !Array.isArray(seriesInfo.videos)) { alert('合集数据无效，请重新粘贴链接'); return }
+              const valid = seriesInfo.videos.filter(v => v && v.bvid)
+              if (valid.length === 0) { alert('合集无有效视频'); return }
+              const videosJson = JSON.stringify({ videos: valid.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration })) })
               setForm(f => ({
                 ...f,
                 type: 'series',
                 title: seriesInfo.title,
-                cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '',
+                cover_image: f.cover_image || valid[0]?.cover_url || '',
                 summary: f.summary || '',
                 content: videosJson,
               }))
