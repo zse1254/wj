@@ -31,7 +31,7 @@ function isBilibili(url: string): boolean {
 export default function SpacePostCard({ post }: { post: SpacePost }) {
   const [open, setOpen] = useState(false)
   const [reporting, setReporting] = useState(false)
-  const embed = `/api/player-proxy?bvid=${post.bvid}`
+  const embed = `https://player.bilibili.com/player.html?bvid=${post.bvid}&high_quality=1&autoplay=1&danmaku=0`
   const fromBili = isBilibili(post.bilibili_url)
 
   const handleReport = async () => {
