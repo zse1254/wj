@@ -13,15 +13,24 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
+    const type = searchParams.get('type')
     const offset = (page - 1) * limit
+
+    let where = ''
+    const whereParams: unknown[] = []
+    if (type) {
+      where = ' WHERE a.type = ?'
+      whereParams.push(type)
+    }
 
     const articles = await query(
       `SELECT a.*, c.name as category_name, u.username as author_name
        FROM articles a
        LEFT JOIN categories c ON a.category_id = c.id
        LEFT JOIN users u ON a.author_id = u.id
+       ${where}
        ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
-      [limit, offset]
+      [...whereParams, limit, offset]
     )
     const countResult = await query('SELECT COUNT(*) as total FROM articles')
     const total = countResult[0]?.total as number || 0

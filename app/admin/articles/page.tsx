@@ -10,10 +10,13 @@ export default function AdminArticlesPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('')
 
   const fetchArticles = () => {
     setLoading(true)
-    fetch(`/api/admin/articles?page=${page}&limit=20`).then(r => r.json()).then(res => {
+    const params = new URLSearchParams({ page: String(page), limit: '20' })
+    if (typeFilter) params.set('type', typeFilter)
+    fetch(`/api/admin/articles?${params}`).then(r => r.json()).then(res => {
       if (res.success) {
         setArticles(res.data.articles)
         setTotal(res.data.total)
@@ -21,7 +24,7 @@ export default function AdminArticlesPage() {
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchArticles() }, [page])
+  useEffect(() => { fetchArticles() }, [page, typeFilter])
 
   const handleDelete = async (id: string) => {
     if (!confirm('确定删除此内容？')) return
@@ -36,12 +39,22 @@ export default function AdminArticlesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">内容管理</h1>
-        <button
-          onClick={() => router.push('/admin/articles/new')}
-          className="bg-[#1a73e8] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#1557b0]"
-        >
-          发布新内容
-        </button>
+        <div className="flex items-center gap-3">
+          <select value={typeFilter} onChange={e => { setTypeFilter(e.target.value); setPage(1) }}
+            className="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#1a73e8] outline-none bg-white">
+            <option value="">全部类型</option>
+            <option value="article">文章</option>
+            <option value="video">视频</option>
+            <option value="series">合集</option>
+            <option value="audio">音频</option>
+          </select>
+          <button
+            onClick={() => router.push('/admin/articles/new')}
+            className="bg-[#1a73e8] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#1557b0]"
+          >
+            发布新内容
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border overflow-hidden">
