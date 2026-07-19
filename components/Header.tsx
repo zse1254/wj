@@ -21,7 +21,9 @@ export default function Header() {
   }, [])
 
   const handleLogout = async () => {
-    document.cookie = 'token=; Path=/; Max-Age=0'
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {}
     setUser(null)
     window.location.href = '/'
   }
