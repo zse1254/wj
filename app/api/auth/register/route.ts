@@ -7,6 +7,9 @@ import { verifyCaptchaToken } from '@/lib/captcha'
 
 export async function POST(request: NextRequest) {
   try {
+    await execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+    await execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10')")
+    await execute('CREATE TABLE IF NOT EXISTS invite_codes (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, max_uses INTEGER NOT NULL DEFAULT 1, used_count INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1, note TEXT, created_by TEXT, created_at TEXT DEFAULT (datetime(\'now\')), expires_at TEXT)')
     const { username, password, captchaToken, captchaAnswer, inviteCode } = await request.json()
 
     if (!username || !password || !captchaToken || captchaAnswer === undefined || captchaAnswer === null) {

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { query } from '@/lib/db'
+import { query, execute } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,6 +58,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     await requireAdmin()
+    await execute('CREATE TABLE IF NOT EXISTS favorites (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, item_type TEXT NOT NULL, item_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id), UNIQUE (user_id, item_type, item_id))')
     const { ids } = await request.json()
     const list: string[] = Array.isArray(ids) ? ids : []
     if (list.length === 0) return Response.json({ success: false, error: '未选择用户' }, { status: 400 })

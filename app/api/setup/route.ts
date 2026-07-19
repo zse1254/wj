@@ -52,6 +52,13 @@ export async function GET(request: Request) {
     `CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY, value TEXT
     )`,
+    `CREATE TABLE IF NOT EXISTS favorites (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+      item_type TEXT NOT NULL, item_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE (user_id, item_type, item_id)
+    )`,
   ]
 
   for (const sql of sqls) {
@@ -72,6 +79,7 @@ export async function GET(request: Request) {
     "ALTER TABLE articles ADD COLUMN author_id TEXT",
     "ALTER TABLE articles ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
     "ALTER TABLE articles ADD COLUMN content TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE vip_cards ADD COLUMN note TEXT",
   ]
   for (const sql of migrations) {
     try {
@@ -116,6 +124,7 @@ export async function GET(request: Request) {
   // Seed default settings
   try {
     await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('invite_required', '0').all()
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('max_favorites', '10').all()
     log.push('OK: settings seeded')
   } catch (e: any) {
     log.push(`FAIL seed settings: ${e.message}`)
