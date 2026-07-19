@@ -59,6 +59,9 @@ async function ensureColumns() {
 }
 
 async function syncCategories(articleId: string, categoryIds: unknown) {
+  try {
+    await execute('CREATE TABLE IF NOT EXISTS article_categories (article_id TEXT, category_id TEXT, PRIMARY KEY (article_id, category_id))', [])
+  } catch {}
   await execute('DELETE FROM article_categories WHERE article_id = ?', [articleId])
   if (Array.isArray(categoryIds)) {
     for (const cid of categoryIds) {
