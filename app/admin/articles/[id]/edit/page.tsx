@@ -56,7 +56,7 @@ export default function EditArticlePage() {
       setFetching(false)
     }
 
-    // 1) Server-side
+    // 1) Server-side (returns exact durations if CF IP not blocked)
     try {
       const res = await fetch('/api/admin/bilibili', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
@@ -68,7 +68,11 @@ export default function EditArticlePage() {
       }
     } catch {}
 
-    // 2) Deno Deploy proxy
+    const bvid = url.match(/BV[a-zA-Z0-9]+/)?.[0]
+
+    // 2) Deno Deploy proxy (does NOT return per-page duration, so we'll supplement after)
+    let seriesFromDeno: typeof seriesInfo = null
+    let videoFromDeno: { title: string; description?: string; cover_url?: string } | null = null
     try {
       const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
@@ -76,13 +80,46 @@ export default function EditArticlePage() {
       })
       const denoData = await denoRes.json()
       if (denoData.success) {
-        fill(denoData.data.video, denoData.data.series ? { title: denoData.data.series.title, videos: denoData.data.series.videos } : null)
-        return
+        videoFromDeno = { title: denoData.data.video.title || '', description: (denoData.data.video.description || '').slice(0, 500), cover_url: denoData.data.video.cover_url || '' }
+        if (denoData.data.series) {
+          seriesFromDeno = { title: denoData.data.series.title, videos: denoData.data.series.videos }
+        }
       }
     } catch {}
 
-    // 3) Client-side: try direct Bilibili API fetch (user's China IP)
-    const bvid = url.match(/BV[a-zA-Z0-9]+/)?.[0]
+    // 3) Supplement per-page durations via client-side Bilibili API fetch (user's China IP)
+    if (bvid && seriesFromDeno) {
+      try {
+        const c = new AbortController()
+        const t = setTimeout(() => c.abort(), 8000)
+        const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+          mode: 'cors',
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.bilibili.com' },
+          signal: c.signal,
+        }).finally(() => clearTimeout(t))
+        if (res.ok) {
+          const json = await res.json()
+          if (json.code === 0 && json.data?.pages?.length) {
+            const pagesByPage: Record<number, number> = {}
+            for (const p of json.data.pages) { pagesByPage[p.page] = p.duration || 0 }
+            seriesFromDeno = {
+              title: seriesFromDeno.title,
+              videos: seriesFromDeno.videos.map(v => ({
+                ...v,
+                duration: v.duration || pagesByPage[v.page || 0] || 0,
+              })),
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (videoFromDeno) {
+      fill(videoFromDeno, seriesFromDeno)
+      return
+    }
+
+    // 4) Last resort: direct browser fetch to Bilibili API (no series info)
     if (bvid) {
       try {
         const c = new AbortController()
@@ -96,12 +133,11 @@ export default function EditArticlePage() {
           const json = await res.json()
           if (json.code === 0 && json.data) {
             const v = json.data
-            const fillVideo = { title: v.title || '', description: (v.desc || '').slice(0, 500), cover_url: v.pic || '' }
             let series = null as typeof seriesInfo
             if (v.pages?.length > 1) {
               series = { title: v.title || '', videos: v.pages.map((p: any) => ({ bvid: v.bvid, title: p.part || `第${p.page}集`, cover_url: v.pic || '', page: p.page, duration: p.duration || 0 })) }
             }
-            fill(fillVideo, series)
+            fill({ title: v.title || '', description: (v.desc || '').slice(0, 500), cover_url: v.pic || '' }, series)
             return
           }
         }
