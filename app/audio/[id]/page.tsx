@@ -6,7 +6,6 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import FavoriteButton from '@/components/FavoriteButton'
-import { isBilibiliUrl } from '@/lib/bilibili'
 import type { Article } from '@/lib/types'
 
 export default function AudioDetailPage() {
@@ -60,10 +59,6 @@ export default function AudioDetailPage() {
           )}
           <div className="mt-6 flex items-center gap-3">
             <FavoriteButton type="audio" id={String(article.id)} />
-            {isBilibiliUrl(article.bilibili_url) && (
-              <a href={article.bilibili_url!} target="_blank" rel="noopener noreferrer"
-                className="text-xs text-[#1a73e8] hover:underline">在 B 站观看</a>
-            )}
             <button onClick={() => {
               const reason = prompt('请填写举报理由（如侵权/违规）：')
               if (!reason) return

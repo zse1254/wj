@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import FavoriteButton from '@/components/FavoriteButton'
-import { extractBilibiliBvid, isBilibiliUrl } from '@/lib/bilibili'
+import { extractBilibiliBvid } from '@/lib/bilibili'
 import type { Article } from '@/lib/types'
 
 export default function VideoDetailPage() {
@@ -89,10 +89,6 @@ export default function VideoDetailPage() {
 
         <div className="flex items-center gap-3 mb-5">
           <FavoriteButton type="video" id={String(article.id)} />
-          {isBilibiliUrl(article.bilibili_url) && (
-            <a href={article.bilibili_url!} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-[#1a73e8] hover:underline ml-auto">在 B 站观看原视频</a>
-          )}
           <button onClick={() => {
             const reason = prompt('请填写举报理由（如侵权/违规）：')
             if (!reason) return

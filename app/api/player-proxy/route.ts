@@ -45,8 +45,22 @@ export async function GET(request: NextRequest) {
 
   if (!html) return new Response('Player unavailable', { status: 502 })
 
-  // 将所有相对路径改写为绝对路径，确保资源从 B 站 CDN 加载
+  // 将所有相对路径改写为绝对路径
   html = html.replace(/(src|href)="\/(?!\/)/g, '$1="https://player.bilibili.com/')
+
+  // 清洗：移除 B 站 logo、水印、跳转链接等非播放控制元素
+  html = html
+    // 移除 logo/header 区域
+    .replace(/<div[^>]*?bpx-player-top[^>]*?>[\s\S]*?<\/div>/gi, '')
+    // 移除 B 站水印（带 bilibili-watermark 或类似特征的元素）
+    .replace(/<div[^>]*?watermark[^>]*?>[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*?bpx-player-video-info[^>]*?>[\s\S]*?<\/div>/gi, '')
+    // 移除链接到 bilibili.com 的 <a> 标签（保留内容）
+    .replace(/<a[^>]*?href="https?:\/\/(?:www\.)?bilibili\.com[^"]*"[^>]*?>([\s\S]*?)<\/a>/gi, '$1')
+    // 移除带 "打开" + "哔哩哔哩" 的按钮/提示
+    .replace(/<[^>]*?[\u6253\u5f00][^>]*?[\u54d7\u54e9\u54d7\u54e9][^>]*?>[\s\S]*?<\/[^>]+>/gi, '')
+    // 移除 bpx-player-state-browser 等覆盖层（提示打开 app）
+    .replace(/<div[^>]*?bpx-player-state[^>]*?>[\s\S]*?<\/div>/gi, '')
 
   return new Response(html, {
     headers: { 'Content-Type': 'text/html;charset=utf-8', 'X-Robots-Tag': 'noindex' },
