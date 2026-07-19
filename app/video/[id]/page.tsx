@@ -52,6 +52,7 @@ export default function VideoDetailPage() {
               scrolling="no"
               frameBorder="0"
               allowFullScreen
+              referrerPolicy="no-referrer"
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
               style={{
                 position: 'absolute',

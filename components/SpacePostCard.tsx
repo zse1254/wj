@@ -98,7 +98,7 @@ export default function SpacePostCard({ post }: { post: SpacePost }) {
               <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white text-2xl leading-none shrink-0">×</button>
             </div>
             <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-              <iframe src={embed} scrolling="no" frameBorder="0" allowFullScreen
+              <iframe src={embed} scrolling="no" frameBorder="0" allowFullScreen referrerPolicy="no-referrer"
                 sandbox="allow-scripts allow-same-origin allow-presentation"
                 className="absolute inset-0 w-full h-full border-0" />
             </div>

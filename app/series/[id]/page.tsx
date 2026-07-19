@@ -365,11 +365,12 @@ export default function SeriesDetailPage() {
               <iframe
                 key={currentBvid}
                 src={currentEmbedUrl}
-                scrolling="no"
-                frameBorder="0"
-                allowFullScreen
-                allow="autoplay"
-                sandbox="allow-scripts allow-same-origin"
+                  scrolling="no"
+                  frameBorder="0"
+                  allowFullScreen
+                  allow="autoplay"
+                  referrerPolicy="no-referrer"
+                  sandbox="allow-scripts allow-same-origin"
                 style={{
                   position: 'absolute',
                   top: 0,
