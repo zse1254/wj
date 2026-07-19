@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import FavoriteButton from '@/components/FavoriteButton'
+import { isBilibiliUrl } from '@/lib/bilibili'
 import type { Article } from '@/lib/types'
 
 interface SeriesVideo {
@@ -343,8 +344,19 @@ export default function SeriesDetailPage() {
             <span>{new Date(article.created_at).toLocaleDateString('zh-CN')}</span>
           </div>
         )}
-        <div className="mb-5">
+        <div className="flex items-center gap-3 mb-5">
           <FavoriteButton type="series" id={String(article.id)} />
+          {isBilibiliUrl(article.bilibili_url) && (
+            <a href={article.bilibili_url!} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-[#1a73e8] hover:underline ml-auto">在 B 站观看合集</a>
+          )}
+          <button onClick={() => {
+            const reason = prompt('请填写举报理由（如侵权/违规）：')
+            if (!reason) return
+            fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ articleId: article.id, reason }) })
+              .then(r => r.json()).then(res => { if (res.success) alert('已收到举报'); else alert(res.error || '提交失败') })
+              .catch(() => alert('网络错误'))
+          }} className="text-xs text-gray-400 hover:text-red-500">举报</button>
         </div>
 
         <div className="flex flex-col xl:flex-row gap-4">

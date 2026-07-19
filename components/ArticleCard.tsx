@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { Article } from '@/lib/types'
+import { isBilibiliUrl } from '@/lib/bilibili'
 
 const typeConfig: Record<string, { label: string; icon: string }> = {
   article: { label: '文章', icon: '📄' },
@@ -56,6 +57,9 @@ export default function ArticleCard({ article }: { article: Article }) {
         <div className="flex items-center gap-2 mb-2">
           {article.category_name && (
             <span className="text-xs text-[#1a73e8] bg-blue-50 px-2 py-0.5 rounded-full font-medium">{article.category_name}</span>
+          )}
+          {isBilibiliUrl(article.bilibili_url) && (
+            <span className="text-xs text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full font-medium">B站</span>
           )}
         </div>
         <h3 className="font-semibold text-[15px] leading-snug line-clamp-2 mb-1.5 text-gray-900 group-hover:text-[#1a73e8] transition-colors">{article.title}</h3>

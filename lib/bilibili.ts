@@ -1,3 +1,11 @@
+export function isBilibiliUrl(url: string | null): boolean {
+  if (!url) return false
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    return host.endsWith('bilibili.com') || host === 'b23.tv'
+  } catch { return false }
+}
+
 export function extractBilibiliBvid(url: string): string | null {
   const patterns = [
     /bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/,

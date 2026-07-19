@@ -89,6 +89,11 @@ const tables = [
     reason TEXT, created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (post_id) REFERENCES member_posts(id) ON DELETE CASCADE
   );`,
+  `CREATE TABLE IF NOT EXISTS article_reports (
+    id TEXT PRIMARY KEY, article_id TEXT NOT NULL, reporter_id TEXT,
+    reason TEXT, created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
+  );`,
 ];
 
 for (const sql of tables) {
