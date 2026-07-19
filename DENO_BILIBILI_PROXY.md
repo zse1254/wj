@@ -58,12 +58,10 @@ async function handler(req: Request): Promise<Response> {
       if (!vd) return new Response(JSON.stringify({ success: false, error: "未找到视频数据" }), { status: 502, headers });
       let htmlSeries;
       if (vd.videos > 1 && vd.pages?.length > 1) {
-        htmlSeries = { title: vd.title || '', videos: vd.pages.map((p: any) => ({ bvid: vd.bvid || bvid, title: p.part || `第${p.page}集`, cover_url: vd.pic || '', page: p.page, duration: p.duration || 0 })) };
+        htmlSeries = { title: vd.title || '', videos: vd.pages.map((p: any) => ({ bvid: vd.bvid || bvid, title: p.part || `第${p.page}集`, cover_url: vd.pic || '', page: p.page })) };
       }
       if (data.ugcSeason) {
-        const pagesByPage: Record<number, number> = {};
-        for (const p of (vd.pages || [])) pagesByPage[p.page] = p.duration || 0;
-        htmlSeries = { season_id: data.ugcSeason.id, title: data.ugcSeason.title || "", videos: (data.ugcSeason.episodes || []).map((ep: any, i: number) => ({ bvid: ep.bvid, title: ep.title || "", cover_url: ep.cover || "", page: ep.page || (i + 1), duration: pagesByPage[ep.page] || 0 })) };
+        htmlSeries = { season_id: data.ugcSeason.id, title: data.ugcSeason.title || "", videos: (data.ugcSeason.episodes || []).map((ep: any) => ({ bvid: ep.bvid, title: ep.title || "", cover_url: ep.cover || "" })) };
       }
       return new Response(JSON.stringify({ success: true, data: { video: { bvid: vd.bvid || bvid, title: vd.title || "", description: (vd.desc || "").slice(0, 500), cover_url: vd.pic || "", duration: vd.duration || 0 }, series: htmlSeries } }), { headers });
     }
@@ -75,7 +73,7 @@ async function handler(req: Request): Promise<Response> {
     let series;
 
     if (d.videos > 1 && d.pages?.length > 1) {
-      series = { title: d.title || '', videos: d.pages.map((p: any) => ({ bvid: d.bvid, title: p.part || `第${p.page}集`, cover_url: d.pic || '', page: p.page, duration: p.duration || 0 })) };
+      series = { title: d.title || '', videos: d.pages.map((p: any) => ({ bvid: d.bvid, title: p.part || `第${p.page}集`, cover_url: d.pic || '', page: p.page })) };
     }
 
     if (d.ugc_season?.id) {
@@ -83,9 +81,7 @@ async function handler(req: Request): Promise<Response> {
         const sRes = await fetch(`https://api.bilibili.com/x/web-interface/season/season?season_id=${d.ugc_season.id}`, { headers: { "User-Agent": "Mozilla/5.0", Referer: "https://www.bilibili.com" } });
         const sJson = await sRes.json();
         if (sJson.code === 0 && sJson.data) {
-          const pagesByPage: Record<number, number> = {};
-          for (const p of (d.pages || [])) pagesByPage[p.page] = p.duration || 0;
-          series = { season_id: d.ugc_season.id, title: sJson.data.title || "", videos: (sJson.data.episodes || []).map((ep: any, i: number) => ({ bvid: ep.bvid, title: ep.title || "", cover_url: ep.cover || "", page: ep.page || (i + 1), duration: pagesByPage[ep.page] || 0 })) };
+          series = { season_id: d.ugc_season.id, title: sJson.data.title || "", videos: (sJson.data.episodes || []).map((ep: any) => ({ bvid: ep.bvid, title: ep.title || "", cover_url: ep.cover || "" })) };
         }
       } catch {}
     }
@@ -143,8 +139,8 @@ curl -X POST https://你的域名.deno.dev \
     "series": {
       "title": "合集标题",
       "videos": [
-        { "bvid": "BV1Ha4y1i7zJ", "title": "第1集标题", "cover_url": "...", "page": 1, "duration": 507 },
-        { "bvid": "BV1Ha4y1i7zJ", "title": "第2集标题", "cover_url": "...", "page": 2, "duration": 480 }
+        { "bvid": "BV1Ha4y1i7zJ", "title": "第1集标题", "cover_url": "...", "page": 1 },
+        { "bvid": "BV1Ha4y1i7zJ", "title": "第2集标题", "cover_url": "...", "page": 2 }
       ]
     }
   }
