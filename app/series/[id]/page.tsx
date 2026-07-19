@@ -41,6 +41,7 @@ export default function SeriesDetailPage() {
             parsed.videos.forEach((v: SeriesVideo, i: number) => {
               if (typeof v.duration === 'number' && v.duration > 0) preset[i] = v.duration
             })
+            console.log('[Series] article videos durations:', (parsed.videos as SeriesVideo[]).map((v: SeriesVideo) => v.duration))
             if (Object.keys(preset).length > 0) setDurations(preset)
           }
         } catch {}
@@ -57,8 +58,9 @@ export default function SeriesDetailPage() {
       const exactByIndex: Record<number, number> = {}
 
       for (const bvid of bvids) {
+        // Only fetch for videos that DON'T already have a duration from the article
         const idxNeeding = videos.reduce<number[]>((acc, v, i) => {
-          if (v.bvid === bvid && durations[i] == null) acc.push(i)
+          if (v.bvid === bvid && !v.duration) acc.push(i)
           return acc
         }, [])
         if (idxNeeding.length === 0) continue
@@ -67,12 +69,17 @@ export default function SeriesDetailPage() {
         let gotExact = false
         const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`
         const corsProxies = [
-          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+          (u: string) => `https://api.allorigins.cn/raw?url=${encodeURIComponent(u)}`,
           (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+          (u: string) => `https://api.allorigins.io/raw?url=${encodeURIComponent(u)}`,
+          (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
         ]
         for (const buildProxy of corsProxies) {
           try {
-            const res = await fetch(buildProxy(apiUrl), { signal: AbortSignal.timeout(8000) })
+            const c1 = new AbortController()
+            const t1 = setTimeout(() => c1.abort(), 8000)
+            const res = await fetch(buildProxy(apiUrl), { signal: c1.signal }).finally(() => clearTimeout(t1))
             if (!res.ok) continue
             const json = await res.json()
             if (json.code === 0 && Array.isArray(json.data?.pages)) {
@@ -108,7 +115,7 @@ export default function SeriesDetailPage() {
           const data = await res.json()
           if (data.success && Array.isArray(data.data?.series?.videos)) {
             const pagesByPage: Record<number, number> = {}
-            for (const v of data.data.series.videos) {
+            for (const v of data.data.series.videos as Array<{ page?: number; duration?: number }>) {
               if (v.page && v.duration) pagesByPage[v.page] = v.duration
             }
             if (Object.keys(pagesByPage).length > 0) {
@@ -217,6 +224,7 @@ export default function SeriesDetailPage() {
     if (intervalRef.current) clearInterval(intervalRef.current)
     if (!autoplay || !currentVideo) { queueMicrotask(() => setRemaining(null)); return }
     const dur = durations[currentIndex] ?? currentVideo.duration ?? 0
+    console.log('[Series] timer using duration:', dur, 'from state:', durations[currentIndex], 'from article:', currentVideo.duration)
     if (!dur) { queueMicrotask(() => setRemaining(null)); return }
     const total = (dur + 5) * 1000
     const start = Date.now()
