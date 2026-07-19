@@ -30,7 +30,9 @@ const tables = [
     vip_expires_at TEXT, invited_by TEXT, created_at TEXT DEFAULT (datetime('now'))
   );`,
   `CREATE TABLE IF NOT EXISTS categories (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT (datetime('now'))
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL,
+    parent_id TEXT, created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (parent_id) REFERENCES categories(id)
   );`,
   `CREATE TABLE IF NOT EXISTS articles (
     id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
@@ -39,6 +41,12 @@ const tables = [
     category_id TEXT, published INTEGER DEFAULT 0, author_id TEXT,
     created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (author_id) REFERENCES users(id)
+  );`,
+  `CREATE TABLE IF NOT EXISTS article_categories (
+    article_id TEXT NOT NULL, category_id TEXT NOT NULL,
+    PRIMARY KEY (article_id, category_id),
+    FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
   );`,
   `CREATE TABLE IF NOT EXISTS vip_cards (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, duration_days INTEGER NOT NULL,
@@ -62,6 +70,20 @@ const tables = [
   `CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY, value TEXT
   );`,
+  `CREATE TABLE IF NOT EXISTS member_spaces (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slug TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL, is_public INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );`,
+  `CREATE TABLE IF NOT EXISTS member_posts (
+    id TEXT PRIMARY KEY, space_id TEXT NOT NULL, user_id TEXT NOT NULL,
+    bilibili_url TEXT NOT NULL, bvid TEXT, type TEXT NOT NULL DEFAULT 'video',
+    title TEXT, cover_image TEXT, duration INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (space_id) REFERENCES member_spaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );`,
 ];
 
 for (const sql of tables) {
@@ -78,7 +100,7 @@ run(addColFile);
 try { unlinkSync(addColFile); } catch {}
 
 console.log("\n=== Seeding settings ===");
-const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10'), ('site_slogan', ''), ('footer_text', ''), ('seo_title', ''), ('seo_description', ''), ('seo_keywords', '');`;
+const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10'), ('site_slogan', ''), ('footer_text', ''), ('seo_title', ''), ('seo_description', ''), ('seo_keywords', ''), ('member_quota', '10'), ('contact_text', ''), ('contact_qrcode', ''), ('space_enabled', '1');`;
 const setFile = `tmp_set_${Date.now()}.sql`;
 writeFileSync(setFile, setSql, "utf8");
 run(setFile);

@@ -18,12 +18,12 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin()
-    const { name, slug } = await request.json()
+    const { name, slug, parent_id } = await request.json()
     if (!name || !slug) {
       return Response.json({ success: false, error: 'Name and slug required' }, { status: 400 })
     }
     const id = uuidv4()
-    await execute('INSERT INTO categories (id, name, slug) VALUES (?, ?, ?)', [id, name, slug])
+    await execute('INSERT INTO categories (id, name, slug, parent_id) VALUES (?, ?, ?, ?)', [id, name, slug, parent_id || null])
     return Response.json({ success: true, data: { id } }, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'

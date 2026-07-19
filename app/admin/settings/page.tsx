@@ -10,6 +10,9 @@ export default function AdminSettingsPage() {
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
   const [seoKeywords, setSeoKeywords] = useState('')
+  const [memberQuota, setMemberQuota] = useState(10)
+  const [contactText, setContactText] = useState('')
+  const [contactQrcode, setContactQrcode] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -24,6 +27,10 @@ export default function AdminSettingsPage() {
         if (d.data.seo_title) setSeoTitle(d.data.seo_title)
         if (d.data.seo_description) setSeoDescription(d.data.seo_description)
         if (d.data.seo_keywords) setSeoKeywords(d.data.seo_keywords)
+        const mq = parseInt(d.data.member_quota, 10)
+        if (Number.isFinite(mq) && mq > 0) setMemberQuota(mq)
+        if (d.data.contact_text) setContactText(d.data.contact_text)
+        if (d.data.contact_qrcode) setContactQrcode(d.data.contact_qrcode)
       }
     })
   }, [])
@@ -40,6 +47,9 @@ export default function AdminSettingsPage() {
         { key: 'seo_title', value: seoTitle },
         { key: 'seo_description', value: seoDescription },
         { key: 'seo_keywords', value: seoKeywords },
+        { key: 'member_quota', value: String(memberQuota) },
+        { key: 'contact_text', value: contactText },
+        { key: 'contact_qrcode', value: contactQrcode },
       ]
       for (const p of posts) {
         await fetch('/api/admin/settings', {
@@ -104,6 +114,25 @@ export default function AdminSettingsPage() {
           <label className="block text-sm text-gray-500 mb-1 mt-3">关键词 (Keywords，逗号分隔)</label>
           <input value={seoKeywords} onChange={e => setSeoKeywords(e.target.value)} placeholder="经济危机,应对方法,资产保护,风险应对,学习"
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+        </div>
+
+        <div className="border-t border-gray-100 pt-5">
+          <p className="font-medium text-gray-800 mb-3">VIP 空间 & 联系客服</p>
+          <label className="block font-medium text-gray-800 mb-1">VIP 空间发布条数上限（每人）</label>
+          <input type="number" min={1} max={500} value={memberQuota}
+            onChange={e => setMemberQuota(parseInt(e.target.value) || 10)}
+            className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none" />
+          <p className="text-sm text-gray-500 mt-1">仅 VIP 可创建空间并分享 B 站视频，达到上限后无法继续添加</p>
+
+          <label className="block text-sm text-gray-500 mb-1 mt-4">联系客服文字</label>
+          <input value={contactText} onChange={e => setContactText(e.target.value)}
+            placeholder="如：加群领资料 / 商务合作请加微信"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+          <label className="block text-sm text-gray-500 mb-1 mt-3">联系客服二维码图片 URL</label>
+          <input value={contactQrcode} onChange={e => setContactQrcode(e.target.value)}
+            placeholder="https://.../qrcode.png"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+          <p className="text-sm text-gray-500 mt-1">页脚「联系客服」按钮将展示该文字与二维码弹窗</p>
         </div>
 
         <button onClick={save} disabled={saving}

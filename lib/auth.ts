@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import type { JWTPayload } from './types'
+import { query } from './db'
 
 function getJwtSecret(): Uint8Array {
   const val = process.env.JWT_SECRET
@@ -43,4 +44,17 @@ export async function requireAdmin(): Promise<JWTPayload> {
   const user = await requireAuth()
   if (!user.isAdmin) throw new Error('Forbidden')
   return user
+}
+
+export async function requireVip(): Promise<JWTPayload> {
+  const user = await requireAuth()
+  if (user.isAdmin) return user // 管理员等同 VIP 权限
+  try {
+    const rows = await query('SELECT is_vip, vip_expires_at FROM users WHERE id = ?', [user.userId])
+    const u = rows[0]
+    const isVip = Number(u?.is_vip) === 1
+    const notExpired = !u?.vip_expires_at || new Date(u.vip_expires_at as string).getTime() > Date.now()
+    if (isVip && notExpired) return user
+  } catch {}
+  throw new Error('Forbidden: VIP required')
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import ArticleCard from '@/components/ArticleCard'
@@ -17,6 +18,10 @@ export default function HomePage() {
   const [category, setCategory] = useState('')
   const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([])
   const [slogan, setSlogan] = useState('')
+  const [userPosts, setUserPosts] = useState<{
+    id: string; bvid: string; title: string; cover_image: string; duration: number;
+    space_slug: string; space_name: string; owner_username: string
+  }[]>([])
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(res => {
@@ -24,6 +29,9 @@ export default function HomePage() {
     }).catch(() => {})
     fetch('/api/settings/public').then(r => r.json()).then(res => {
       if (res.success && res.data.site_slogan) setSlogan(res.data.site_slogan)
+    }).catch(() => {})
+    fetch('/api/spaces?latest=1&limit=8').then(r => r.json()).then(res => {
+      if (res.success) setUserPosts(res.data)
     }).catch(() => {})
   }, [])
 
@@ -160,6 +168,38 @@ export default function HomePage() {
             </>
           )}
         </div>
+
+        {userPosts.length > 0 && (
+          <div className="mt-12 border-t border-gray-100 pt-10">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-1 h-5 bg-[#d4a017] rounded-full" />
+              <h2 className="text-lg font-bold text-gray-900">用户分享</h2>
+              <span className="text-sm text-gray-400">VIP 成员的 B 站视频分享</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {userPosts.map(p => (
+                <Link key={p.id} href={`/space/${p.space_slug}`}
+                  className="group block bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-gray-200 hover:-translate-y-0.5">
+                  <div className="relative aspect-video bg-gray-100 overflow-hidden">
+                    {p.cover_image ? (
+                      <img src={p.cover_image} alt={p.title} loading="lazy" referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#1a4a7a] to-[#0d2b4a] flex items-center justify-center text-white/30 text-3xl">▶</div>
+                    )}
+                    <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center text-[#1a73e8] text-lg shadow-lg">▶</span>
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="font-semibold text-[15px] leading-snug line-clamp-2 mb-1.5 text-gray-900 group-hover:text-[#1a73e8] transition-colors">{p.title}</h3>
+                    <p className="text-xs text-gray-400">@{p.owner_username} · {p.space_name}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
       <Footer />
     </>

@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
       params.push(type)
     }
     if (category) {
-      sql += ' AND c.slug = ?'
-      params.push(category)
+      sql += ' AND (c.slug = ? OR a.id IN (SELECT ac.article_id FROM article_categories ac JOIN categories cc ON cc.id = ac.category_id WHERE cc.slug = ?))'
+      params.push(category, category)
     }
 
     sql += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?'
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
       countParams.push(type)
     }
     if (category) {
-      countSql += ' AND category_id IN (SELECT id FROM categories WHERE slug = ?)'
-      countParams.push(category)
+      countSql += ' AND (category_id IN (SELECT id FROM categories WHERE slug = ?) OR id IN (SELECT ac.article_id FROM article_categories ac JOIN categories cc ON cc.id = ac.category_id WHERE cc.slug = ?))'
+      countParams.push(category, category)
     }
     const countResult = await query(countSql, countParams)
     const total = countResult[0]?.total as number || 0

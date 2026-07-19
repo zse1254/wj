@@ -13,7 +13,7 @@ export default function EditArticlePage() {
   const [form, setForm] = useState({
     title: '', summary: '', content: '', type: 'video',
     cover_image: '', video_url: '', audio_url: '', bilibili_url: '',
-    is_m3u8: false, category_id: '', published: true,
+    is_m3u8: false, category_id: '', category_ids: [] as string[], published: true,
   })
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
@@ -34,6 +34,7 @@ export default function EditArticlePage() {
           video_url: a.video_url || '', audio_url: a.audio_url || '',
           bilibili_url: a.bilibili_url || '', is_m3u8: Boolean(a.is_m3u8),
           category_id: a.category_id || '', published: Boolean(a.published),
+          category_ids: Array.isArray(a.category_ids) ? a.category_ids : [],
         })
       }
     }).finally(() => setLoading(false))
@@ -246,12 +247,34 @@ export default function EditArticlePage() {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">分类</label>
+            <label className="block text-sm font-medium mb-1">主分类</label>
             <select value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}
               className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none">
               <option value="">无分类</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">所属分类（可多选）</label>
+          <div className="flex flex-wrap gap-2">
+            {categories.map(c => {
+              const checked = form.category_ids.includes(c.id)
+              return (
+                <button type="button" key={c.id}
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    category_ids: checked ? f.category_ids.filter(x => x !== c.id) : [...f.category_ids, c.id],
+                  }))}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                    checked ? 'bg-[#1a73e8] text-white border-[#1a73e8]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}>
+                  {c.name}
+                </button>
+              )
+            })}
+            {categories.length === 0 && <span className="text-sm text-gray-400">暂无可选分类</span>}
           </div>
         </div>
 

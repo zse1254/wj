@@ -49,6 +49,17 @@ async function ensureColumns() {
   }
 }
 
+async function syncCategories(articleId: string, categoryIds: unknown) {
+  await execute('DELETE FROM article_categories WHERE article_id = ?', [articleId])
+  if (Array.isArray(categoryIds)) {
+    for (const cid of categoryIds) {
+      if (typeof cid === 'string' && cid) {
+        await execute('INSERT OR IGNORE INTO article_categories (article_id, category_id) VALUES (?, ?)', [articleId, cid])
+      }
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   let body: any, id: string, admin: any
   try {
@@ -71,6 +82,7 @@ export async function POST(request: NextRequest) {
         body.is_m3u8 ? 1 : 0, body.category_id || null, body.published ? 1 : 0, admin.userId,
       ]
     )
+    await syncCategories(id, body.category_ids)
 
     return Response.json({ success: true, data: { id } }, { status: 201 })
   } catch (err: unknown) {
@@ -90,7 +102,8 @@ export async function POST(request: NextRequest) {
             id, body?.title || '', retrySlug, body?.content || '', body?.summary || '', body?.cover_image || null,
             body?.type || 'video', body?.video_url || null, body?.audio_url || null, body?.bilibili_url || null,
             body?.is_m3u8 ? 1 : 0, body?.category_id || null, body?.published ? 1 : 0, admin?.userId || '',
-          ).all()
+           ).all()
+          await syncCategories(id, body?.category_ids)
           return Response.json({ success: true, data: { id } }, { status: 201 })
         }
       } catch {}

@@ -59,6 +59,20 @@ export async function GET(request: Request) {
       FOREIGN KEY (user_id) REFERENCES users(id),
       UNIQUE (user_id, item_type, item_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS member_spaces (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, slug TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL, is_public INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS member_posts (
+      id TEXT PRIMARY KEY, space_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      bilibili_url TEXT NOT NULL, bvid TEXT, type TEXT NOT NULL DEFAULT 'video',
+      title TEXT, cover_image TEXT, duration INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (space_id) REFERENCES member_spaces(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
   ]
 
   for (const sql of sqls) {
@@ -80,6 +94,7 @@ export async function GET(request: Request) {
     "ALTER TABLE articles ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
     "ALTER TABLE articles ADD COLUMN content TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE vip_cards ADD COLUMN note TEXT",
+    "ALTER TABLE categories ADD COLUMN parent_id TEXT",
   ]
   for (const sql of migrations) {
     try {
@@ -125,6 +140,10 @@ export async function GET(request: Request) {
   try {
     await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('invite_required', '0').all()
     await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('max_favorites', '10').all()
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('member_quota', '10').all()
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('contact_text', '').all()
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('contact_qrcode', '').all()
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('space_enabled', '1').all()
     log.push('OK: settings seeded')
   } catch (e: any) {
     log.push(`FAIL seed settings: ${e.message}`)
