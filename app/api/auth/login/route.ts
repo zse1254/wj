@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 import { createToken } from '@/lib/auth'
 
@@ -10,6 +11,20 @@ export async function POST(request: NextRequest) {
       return Response.json({ success: false, error: 'Missing credentials' }, { status: 400 })
     }
 
+    // Admin login via env vars — works immediately after deploy, no setup needed
+    const adminUser = process.env.ADMIN_USERNAME
+    const adminPass = process.env.ADMIN_PASSWORD
+    if (adminUser && adminPass && username === adminUser && password === adminPass) {
+      const token = await createToken({ userId: 'admin-env', isAdmin: true })
+      const response = Response.json({
+        success: true,
+        data: { id: 'admin-env', username: adminUser, email: `${adminUser}@example.com`, isAdmin: true, isVip: true, vipExpiresAt: null },
+      })
+      response.headers.set('Set-Cookie', `token=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`)
+      return response
+    }
+
+    // Fallback: database users
     const users = await query(
       'SELECT id, username, email, password_hash, is_admin, is_vip, vip_expires_at FROM users WHERE username = ? OR email = ?',
       [username, username]

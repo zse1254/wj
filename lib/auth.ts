@@ -2,18 +2,24 @@ import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import type { JWTPayload } from './types'
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'wj-default-secret-key-change-in-production')
+function getJwtSecret(): Uint8Array {
+  const val = process.env.JWT_SECRET
+  if (!val) throw new Error('JWT_SECRET environment variable is required')
+  return new TextEncoder().encode(val)
+}
 
 export async function createToken(payload: JWTPayload): Promise<string> {
+  const secret = getJwtSecret()
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
-    .sign(JWT_SECRET)
+    .sign(secret)
 }
 
 export async function verifyToken(token: string): Promise<JWTPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
+    const secret = getJwtSecret()
+    const { payload } = await jwtVerify(token, secret)
     return payload as unknown as JWTPayload
   } catch {
     return null

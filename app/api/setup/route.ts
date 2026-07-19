@@ -74,10 +74,11 @@ export async function GET(request: Request) {
     }
   }
 
-  // Seed/update admin (use env vars or defaults)
+  // Seed/update admin (must be set via env vars; no hardcoded defaults)
   try {
-    const adminUser = process.env.ADMIN_USERNAME || 'admin'
-    const adminPass = process.env.ADMIN_PASSWORD || 'admin123'
+    const adminUser = process.env.ADMIN_USERNAME
+    const adminPass = process.env.ADMIN_PASSWORD
+    if (!adminUser || !adminPass) throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD environment variables are required')
     const bcrypt = await import('bcryptjs')
     const hash = bcrypt.hashSync(adminPass, 10)
     const existing = await db.prepare("SELECT id FROM users WHERE is_admin = 1").all()
