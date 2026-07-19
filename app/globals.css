@@ -1,6 +1,8 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme {
+:root {
   --color-primary: #1a4a7a;
   --color-primary-light: #1a73e8;
   --color-primary-dark: #0d2b4a;
@@ -13,8 +15,6 @@
   --color-border: #e2e5ea;
   --color-danger: #dc2626;
   --color-success: #16a34a;
-  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Geist Mono', ui-monospace, monospace;
 }
 
 body {
