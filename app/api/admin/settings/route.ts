@@ -2,9 +2,14 @@ import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
 
+async function ensureSettingsTable() {
+  await execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+}
+
 export async function GET() {
   try {
     await requireAdmin()
+    await ensureSettingsTable()
     const rows = await query('SELECT key, value FROM settings')
     const data: Record<string, string> = {}
     for (const r of rows) data[String(r.key)] = String(r.value ?? '')
@@ -19,6 +24,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     await requireAdmin()
+    await ensureSettingsTable()
     const { key, value } = await request.json()
     if (!key) return Response.json({ success: false, error: '缺少 key' }, { status: 400 })
     await execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, String(value)])

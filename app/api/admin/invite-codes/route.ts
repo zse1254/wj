@@ -3,9 +3,15 @@ import { v4 as uuidv4 } from 'uuid'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
 
+async function ensureInviteTables() {
+  await execute('CREATE TABLE IF NOT EXISTS invite_codes (id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, max_uses INTEGER NOT NULL DEFAULT 1, used_count INTEGER NOT NULL DEFAULT 0, enabled INTEGER NOT NULL DEFAULT 1, note TEXT, created_by TEXT, created_at TEXT DEFAULT (datetime(\'now\')), expires_at TEXT)')
+  await execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+}
+
 export async function GET() {
   try {
     await requireAdmin()
+    await ensureInviteTables()
     const codes = await query(
       `SELECT c.*, u.username as created_by_username
        FROM invite_codes c LEFT JOIN users u ON c.created_by = u.id

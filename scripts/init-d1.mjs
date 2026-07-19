@@ -64,22 +64,11 @@ for (const sql of tables) {
   try { unlinkSync(tmpFile); } catch {}
 }
 
-console.log("\n=== Migrating users table (email optional, invited_by) ===");
-const migSql = `
-ALTER TABLE users RENAME TO users_old;
-CREATE TABLE users (
-  id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE,
-  password_hash TEXT NOT NULL, is_admin INTEGER DEFAULT 0, is_vip INTEGER DEFAULT 0,
-  vip_expires_at TEXT, invited_by TEXT, created_at TEXT DEFAULT (datetime('now'))
-);
-INSERT INTO users (id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at)
-  SELECT id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at FROM users_old;
-DROP TABLE users_old;
-`;
-const migFile = `tmp_mig_${Date.now()}.sql`;
-writeFileSync(migFile, migSql, "utf8");
-run(migFile);
-try { unlinkSync(migFile); } catch {}
+console.log("\n=== Adding invited_by column to users (if missing) ===");
+const addColFile = `tmp_addcol_${Date.now()}.sql`;
+writeFileSync(addColFile, `ALTER TABLE users ADD COLUMN invited_by TEXT;`);
+run(addColFile);
+try { unlinkSync(addColFile); } catch {}
 
 console.log("\n=== Seeding settings ===");
 const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0');`;

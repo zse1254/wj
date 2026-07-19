@@ -60,9 +60,11 @@ export async function POST(request: NextRequest) {
 
     const password_hash = bcrypt.hashSync(password, 10)
     const id = uuidv4()
+    const placeholderEmail = `${username}@local`
+    try { await execute('ALTER TABLE users ADD COLUMN invited_by TEXT') } catch {}
     await execute(
       'INSERT INTO users (id, username, email, password_hash, invited_by) VALUES (?, ?, ?, ?, ?)',
-      [id, username, null, password_hash, invitedBy]
+      [id, username, placeholderEmail, password_hash, invitedBy]
     )
 
     if (invitedBy) {

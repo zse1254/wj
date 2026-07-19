@@ -216,6 +216,7 @@ export default function SeriesDetailPage() {
   // Countdown timer with pause/resume support
   const remainingRef = useRef<number | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const activeKeyRef = useRef<string>('')
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
@@ -227,6 +228,7 @@ export default function SeriesDetailPage() {
     stopTimer()
     remainingRef.current = seconds
     setRemaining(seconds)
+    setPaused(false)
     tickRef.current = setInterval(() => {
       if (remainingRef.current === null) return
       remainingRef.current -= 1
@@ -241,20 +243,16 @@ export default function SeriesDetailPage() {
   }, [stopTimer, playNext])
 
   const togglePause = useCallback(() => {
-    setPaused(prev => {
-      const next = !prev
-      if (next) {
-        // pause: freeze remaining
-        if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
-      } else {
-        // resume: continue from remaining
-        if (remainingRef.current !== null && remainingRef.current > 0) {
-          startTimer(remainingRef.current)
-        }
-      }
-      return next
-    })
-  }, [startTimer])
+    if (remainingRef.current === null) return
+    if (paused) {
+      // resume: continue from remaining
+      if (remainingRef.current > 0) startTimer(remainingRef.current)
+    } else {
+      // pause: freeze remaining
+      if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      setPaused(true)
+    }
+  }, [paused, startTimer])
 
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
@@ -264,12 +262,12 @@ export default function SeriesDetailPage() {
     : ''
 
   useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
     if (!autoplay || !currentVideo) {
       stopTimer()
       remainingRef.current = null
       setRemaining(null)
       setPaused(false)
+      activeKeyRef.current = ''
       return
     }
     const dur = durations[currentIndex] ?? currentVideo.duration ?? 0
@@ -278,13 +276,17 @@ export default function SeriesDetailPage() {
       remainingRef.current = null
       setRemaining(null)
       setPaused(false)
+      activeKeyRef.current = ''
       return
     }
-    // Reset and start a fresh countdown for the current episode
+    // Only (re)start when the active episode changes — NOT when durations state updates,
+    // otherwise the countdown resets on every fetch and pause appears broken.
+    const key = `${currentIndex}:${currentBvid}`
+    if (activeKeyRef.current === key && remainingRef.current !== null) return
+    activeKeyRef.current = key
     startTimer(dur + 5)
-    setPaused(false)
     return () => { stopTimer() }
-  }, [currentIndex, autoplay, durations, currentBvid, currentVideo, startTimer, stopTimer])
+  }, [currentIndex, autoplay, currentBvid, currentVideo, startTimer, stopTimer])
 
   if (loading) return (
     <>
