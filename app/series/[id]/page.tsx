@@ -304,10 +304,27 @@ export default function SeriesDetailPage() {
     </>
   )
 
-  if (!article || videos.length === 0) return (
+  if (!article) return (
     <>
       <Header />
       <main className="flex-1 flex items-center justify-center"><div className="text-center"><p className="text-4xl mb-4">📺</p><p className="text-gray-500">合集不存在</p><Link href="/" className="text-[#1a73e8] hover:underline mt-4 block">返回首页</Link></div></main>
+      <Footer />
+    </>
+  )
+
+  if (videos.length === 0) return (
+    <>
+      <Header />
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+        <div className="text-center py-12">
+          <p className="text-4xl mb-4">📺</p>
+          <p className="text-gray-500 mb-2">合集内容为空</p>
+          <pre className="text-left text-xs bg-gray-100 p-4 rounded max-w-xl mx-auto overflow-auto mt-4">
+            <code>{JSON.stringify({ id: article.id, title: article.title, content_len: (article.content||'').length, content_preview: (article.content||'').slice(0,200), bilibili_url: article.bilibili_url }, null, 2)}</code>
+          </pre>
+          <Link href="/" className="text-[#1a73e8] hover:underline mt-4 inline-block">返回首页</Link>
+        </div>
+      </main>
       <Footer />
     </>
   )
