@@ -81,6 +81,33 @@ export default function EditArticlePage() {
       }
     } catch {}
 
+    // 3) Client-side: try direct Bilibili API fetch (user's China IP)
+    const bvid = url.match(/BV[a-zA-Z0-9]+/)?.[0]
+    if (bvid) {
+      try {
+        const c = new AbortController()
+        const t = setTimeout(() => c.abort(), 8000)
+        const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+          mode: 'cors',
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.bilibili.com' },
+          signal: c.signal,
+        }).finally(() => clearTimeout(t))
+        if (res.ok) {
+          const json = await res.json()
+          if (json.code === 0 && json.data) {
+            const v = json.data
+            const fillVideo = { title: v.title || '', description: (v.desc || '').slice(0, 500), cover_url: v.pic || '' }
+            let series = null as typeof seriesInfo
+            if (v.pages?.length > 1) {
+              series = { title: v.title || '', videos: v.pages.map((p: any) => ({ bvid: v.bvid, title: p.part || `第${p.page}集`, cover_url: v.pic || '', page: p.page, duration: p.duration || 0 })) }
+            }
+            fill(fillVideo, series)
+            return
+          }
+        }
+      } catch {}
+    }
+
     setFetchError('Bilibili page error: 412')
     setFetching(false)
   }, [])
@@ -222,7 +249,10 @@ export default function EditArticlePage() {
           <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>
           <p className="text-sm text-gray-500 mb-3">共 {seriesInfo.videos.length} 个视频</p>
           <button type="button" onClick={() => {
-            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map(v => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration })) })
+            // Preserve existing durations from content if fetched series lacks them
+            let existingDurations: Record<string, number> = {}
+            try { const c = JSON.parse(form.content || '{}'); if (Array.isArray(c.videos)) { c.videos.forEach((v: any, i: number) => { if (v.duration) existingDurations[i] = v.duration }) } } catch {}
+            const videosJson = JSON.stringify({ videos: seriesInfo.videos.map((v, i) => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration || existingDurations[i] || undefined })) })
             setForm(f => ({ ...f, type: 'series', content: videosJson, cover_image: f.cover_image || seriesInfo.videos[0]?.cover_url || '' }))
           }}
             className="bg-purple-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-purple-700">
