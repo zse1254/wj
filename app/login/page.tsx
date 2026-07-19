@@ -24,7 +24,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (data.success) {
-        router.push('/')
+        router.push(data.data.isAdmin ? '/admin' : '/')
         router.refresh()
       } else {
         setError(data.error || '登录失败')

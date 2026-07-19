@@ -8,6 +8,18 @@ export async function GET() {
       return Response.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
+    // Admin logged in via env vars (no DB record)
+    if (payload.userId === 'admin-env') {
+      const adminUser = process.env.ADMIN_USERNAME || 'admin'
+      return Response.json({
+        success: true,
+        data: {
+          id: 'admin-env', username: adminUser, email: `${adminUser}@example.com`,
+          isAdmin: true, isVip: true, vipExpiresAt: null, createdAt: null,
+        },
+      })
+    }
+
     const users = await query(
       'SELECT id, username, email, is_admin, is_vip, vip_expires_at, created_at FROM users WHERE id = ?',
       [payload.userId]
