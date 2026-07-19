@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('latest')) {
       const limit = Math.min(parseInt(searchParams.get('limit') || '12'), 24)
       const posts = await query(
-        `SELECT p.id, p.bvid, p.title, p.cover_image, p.duration,
+        `SELECT p.id, p.bvid, p.title, p.cover_image, p.duration, p.bilibili_url,
                 s.slug as space_slug, s.display_name as space_name, u.username as owner_username
          FROM member_posts p
          JOIN member_spaces s ON p.space_id = s.id

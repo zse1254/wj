@@ -14,6 +14,7 @@ interface SpacePost {
   cover_image: string
   duration: number
   created_at: string
+  bilibili_url: string
 }
 
 interface Space {

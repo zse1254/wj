@@ -25,7 +25,7 @@ export async function GET(
     }
 
     const posts = await query(
-      'SELECT id, bvid, title, cover_image, duration, created_at FROM member_posts WHERE space_id = ? ORDER BY created_at DESC',
+      'SELECT id, bvid, title, cover_image, duration, created_at, bilibili_url FROM member_posts WHERE space_id = ? ORDER BY created_at DESC',
       [space.id]
     )
     return Response.json({ success: true, data: { space, posts } })

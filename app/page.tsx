@@ -20,7 +20,7 @@ export default function HomePage() {
   const [slogan, setSlogan] = useState('')
   const [userPosts, setUserPosts] = useState<{
     id: string; bvid: string; title: string; cover_image: string; duration: number;
-    space_slug: string; space_name: string; owner_username: string
+    bilibili_url: string; space_slug: string; space_name: string; owner_username: string
   }[]>([])
 
   useEffect(() => {

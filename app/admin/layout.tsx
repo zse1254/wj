@@ -12,6 +12,7 @@ const navItems = [
   { href: '/admin/invite-codes', label: '邀请码', icon: '🔑' },
   { href: '/admin/settings', label: '系统设置', icon: '⚙️' },
   { href: '/admin/users', label: '用户管理', icon: '👥' },
+  { href: '/admin/reports', label: '举报处理', icon: '🚩' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

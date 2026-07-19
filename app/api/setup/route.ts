@@ -73,6 +73,11 @@ export async function GET(request: Request) {
       FOREIGN KEY (space_id) REFERENCES member_spaces(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS member_reports (
+      id TEXT PRIMARY KEY, post_id TEXT NOT NULL, reporter_id TEXT,
+      reason TEXT, created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (post_id) REFERENCES member_posts(id) ON DELETE CASCADE
+    )`,
   ]
 
   for (const sql of sqls) {
