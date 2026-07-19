@@ -78,7 +78,7 @@ run(addColFile);
 try { unlinkSync(addColFile); } catch {}
 
 console.log("\n=== Seeding settings ===");
-const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10'), ('site_slogan', ''), ('footer_text', '');`;
+const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10'), ('site_slogan', ''), ('footer_text', ''), ('seo_title', ''), ('seo_description', ''), ('seo_keywords', '');`;
 const setFile = `tmp_set_${Date.now()}.sql`;
 writeFileSync(setFile, setSql, "utf8");
 run(setFile);

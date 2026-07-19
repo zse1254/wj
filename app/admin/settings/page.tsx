@@ -7,6 +7,9 @@ export default function AdminSettingsPage() {
   const [maxFavorites, setMaxFavorites] = useState(10)
   const [slogan, setSlogan] = useState('')
   const [footerText, setFooterText] = useState('')
+  const [seoTitle, setSeoTitle] = useState('')
+  const [seoDescription, setSeoDescription] = useState('')
+  const [seoKeywords, setSeoKeywords] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -18,6 +21,9 @@ export default function AdminSettingsPage() {
         if (Number.isFinite(mf) && mf > 0) setMaxFavorites(mf)
         if (d.data.site_slogan) setSlogan(d.data.site_slogan)
         if (d.data.footer_text) setFooterText(d.data.footer_text)
+        if (d.data.seo_title) setSeoTitle(d.data.seo_title)
+        if (d.data.seo_description) setSeoDescription(d.data.seo_description)
+        if (d.data.seo_keywords) setSeoKeywords(d.data.seo_keywords)
       }
     })
   }, [])
@@ -31,6 +37,9 @@ export default function AdminSettingsPage() {
         { key: 'max_favorites', value: String(maxFavorites) },
         { key: 'site_slogan', value: slogan },
         { key: 'footer_text', value: footerText },
+        { key: 'seo_title', value: seoTitle },
+        { key: 'seo_description', value: seoDescription },
+        { key: 'seo_keywords', value: seoKeywords },
       ]
       for (const p of posts) {
         await fetch('/api/admin/settings', {
@@ -80,6 +89,20 @@ export default function AdminSettingsPage() {
           <label className="block text-sm text-gray-500 mb-1 mt-3">页脚免责声明</label>
           <textarea value={footerText} onChange={e => setFooterText(e.target.value)} rows={2}
             placeholder="本站内容仅供学习与交流，不构成任何投资建议……"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+        </div>
+
+        <div className="border-t border-gray-100 pt-5">
+          <p className="font-medium text-gray-800 mb-3">SEO 搜索引擎优化</p>
+          <label className="block text-sm text-gray-500 mb-1">网站标题 (Title)</label>
+          <input value={seoTitle} onChange={e => setSeoTitle(e.target.value)} placeholder="经济危机生存指南 - 系统化的应对方法与实战策略"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+          <label className="block text-sm text-gray-500 mb-1 mt-3">描述 (Description)</label>
+          <textarea value={seoDescription} onChange={e => setSeoDescription(e.target.value)} rows={2}
+            placeholder="我们不预测市场，也不给投资建议……"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
+          <label className="block text-sm text-gray-500 mb-1 mt-3">关键词 (Keywords，逗号分隔)</label>
+          <input value={seoKeywords} onChange={e => setSeoKeywords(e.target.value)} placeholder="经济危机,应对方法,资产保护,风险应对,学习"
             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" />
         </div>
 

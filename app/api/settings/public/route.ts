@@ -1,6 +1,6 @@
 import { query } from '@/lib/db'
 
-const PUBLIC_KEYS = ['footer_text', 'site_slogan', 'site_subtitle']
+const PUBLIC_KEYS = ['footer_text', 'site_slogan', 'site_subtitle', 'seo_title', 'seo_description', 'seo_keywords']
 
 export async function GET() {
   try {
