@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -8,9 +8,25 @@ import Footer from '@/components/Footer'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [form, setForm] = useState({ username: '', email: '', password: '', confirmPassword: '' })
+  const [form, setForm] = useState({ username: '', password: '', confirmPassword: '', inviteCode: '' })
+  const [captcha, setCaptcha] = useState({ token: '', question: '' })
+  const [captchaInput, setCaptchaInput] = useState('')
+  const [inviteRequired, setInviteRequired] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const loadCaptcha = () => {
+    fetch('/api/auth/captcha', { method: 'POST' }).then(r => r.json()).then(d => {
+      if (d.success) setCaptcha({ token: d.token, question: d.question })
+    })
+  }
+
+  useEffect(() => {
+    loadCaptcha()
+    fetch('/api/auth/invite-required').then(r => r.json()).then(d => {
+      if (d.success) setInviteRequired(d.required)
+    }).catch(() => {})
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,12 +39,22 @@ export default function RegisterPage() {
       setError('密码至少6位')
       return
     }
+    if (inviteRequired && !form.inviteCode.trim()) {
+      setError('请输入邀请码')
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: form.username, email: form.email, password: form.password }),
+        body: JSON.stringify({
+          username: form.username,
+          password: form.password,
+          captchaToken: captcha.token,
+          captchaAnswer: Number(captchaInput),
+          inviteCode: form.inviteCode.trim() || undefined,
+        }),
       })
       const data = await res.json()
       if (data.success) {
@@ -36,6 +62,8 @@ export default function RegisterPage() {
         router.refresh()
       } else {
         setError(data.error || '注册失败')
+        loadCaptcha()
+        setCaptchaInput('')
       }
     } catch {
       setError('网络错误')
@@ -61,11 +89,6 @@ export default function RegisterPage() {
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder="输入用户名" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">邮箱</label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder="输入邮箱" required />
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
                 <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder="至少6位" required />
@@ -75,6 +98,22 @@ export default function RegisterPage() {
                 <input type="password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder="再次输入密码" required />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">验证码</label>
+                <div className="flex gap-2">
+                  <input type="text" value={captchaInput} onChange={e => setCaptchaInput(e.target.value)}
+                    className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder={captcha.question || '点击刷新'} required />
+                  <button type="button" onClick={loadCaptcha}
+                    className="px-3 py-2.5 text-sm bg-gray-100 rounded-xl hover:bg-gray-200 whitespace-nowrap">{captcha.question || '刷新'}</button>
+                </div>
+              </div>
+              {inviteRequired && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">邀请码</label>
+                  <input type="text" value={form.inviteCode} onChange={e => setForm(f => ({ ...f, inviteCode: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1a73e8] outline-none text-sm" placeholder="请输入邀请码" required />
+                </div>
+              )}
               {error && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
               <button type="submit" disabled={loading}
                 className="w-full bg-[#1a4a7a] text-white py-2.5 rounded-xl hover:bg-[#0d2b4a] disabled:opacity-50 transition-all duration-200 font-medium shadow-md hover:shadow-lg">

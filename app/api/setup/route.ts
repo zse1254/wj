@@ -18,9 +18,9 @@ export async function GET(request: Request) {
   const sqls = [
     `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+      email TEXT UNIQUE, password_hash TEXT NOT NULL,
       is_admin INTEGER DEFAULT 0, is_vip INTEGER DEFAULT 0,
-      vip_expires_at TEXT,
+      vip_expires_at TEXT, invited_by TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
     `CREATE TABLE IF NOT EXISTS categories (
@@ -39,7 +39,18 @@ export async function GET(request: Request) {
     `CREATE TABLE IF NOT EXISTS vip_cards (
       id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL,
       duration_days INTEGER NOT NULL, is_used INTEGER DEFAULT 0,
-      used_by TEXT, used_at TEXT, created_at TEXT DEFAULT (datetime('now'))
+      used_by TEXT, used_at TEXT, created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (used_by) REFERENCES users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS invite_codes (
+      id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL,
+      max_uses INTEGER NOT NULL DEFAULT 1, used_count INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1, note TEXT,
+      created_by TEXT, created_at TEXT DEFAULT (datetime('now')),
+      expires_at TEXT
+    )`,
+    `CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY, value TEXT
     )`,
   ]
 
@@ -72,6 +83,42 @@ export async function GET(request: Request) {
         log.push(`MIGRATE SKIP: ${e.message}`)
       }
     }
+  }
+
+  // Migrate users table: drop NOT NULL on email (now optional) + add invited_by
+  try {
+    const r = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").all()
+    const sql = r.results?.[0]?.sql as string | undefined
+    if (sql && sql.includes('email TEXT UNIQUE NOT NULL')) {
+      await db.prepare("ALTER TABLE users RENAME TO users_old").all()
+      await db.prepare(
+        `CREATE TABLE users (
+          id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
+          email TEXT UNIQUE, password_hash TEXT NOT NULL,
+          is_admin INTEGER DEFAULT 0, is_vip INTEGER DEFAULT 0,
+          vip_expires_at TEXT, invited_by TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        )`
+      ).all()
+      await db.prepare(
+        `INSERT INTO users (id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at)
+         SELECT id, username, email, password_hash, is_admin, is_vip, vip_expires_at, created_at FROM users_old`
+      ).all()
+      await db.prepare("DROP TABLE users_old").all()
+      log.push('OK: users table migrated (email optional, invited_by added)')
+    } else if (sql && !sql.includes('invited_by')) {
+      try { await db.prepare("ALTER TABLE users ADD COLUMN invited_by TEXT").all(); log.push('OK: users.invited_by added') } catch {}
+    }
+  } catch (e: any) {
+    log.push(`FAIL migrate users: ${e.message}`)
+  }
+
+  // Seed default settings
+  try {
+    await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind('invite_required', '0').all()
+    log.push('OK: settings seeded')
+  } catch (e: any) {
+    log.push(`FAIL seed settings: ${e.message}`)
   }
 
   // Seed/update admin (must be set via env vars; no hardcoded defaults)

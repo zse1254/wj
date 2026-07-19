@@ -28,6 +28,7 @@ export default function SeriesDetailPage() {
   const requestedBvidsRef = useRef<Set<string>>(new Set())
   const [durations, setDurations] = useState<Record<number, number>>({})
   const [remaining, setRemaining] = useState<number | null>(null)
+  const [paused, setPaused] = useState(false)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -212,6 +213,49 @@ export default function SeriesDetailPage() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [])
 
+  // Countdown timer with pause/resume support
+  const remainingRef = useRef<number | null>(null)
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopTimer = useCallback(() => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+  }, [])
+
+  const startTimer = useCallback((seconds: number) => {
+    stopTimer()
+    remainingRef.current = seconds
+    setRemaining(seconds)
+    tickRef.current = setInterval(() => {
+      if (remainingRef.current === null) return
+      remainingRef.current -= 1
+      setRemaining(remainingRef.current)
+      if (remainingRef.current <= 0) {
+        stopTimer()
+        remainingRef.current = null
+        setRemaining(null)
+        playNext()
+      }
+    }, 1000)
+  }, [stopTimer, playNext])
+
+  const togglePause = useCallback(() => {
+    setPaused(prev => {
+      const next = !prev
+      if (next) {
+        // pause: freeze remaining
+        if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
+      } else {
+        // resume: continue from remaining
+        if (remainingRef.current !== null && remainingRef.current > 0) {
+          startTimer(remainingRef.current)
+        }
+      }
+      return next
+    })
+  }, [startTimer])
+
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
@@ -220,25 +264,27 @@ export default function SeriesDetailPage() {
     : ''
 
   useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
     if (intervalRef.current) clearInterval(intervalRef.current)
-    if (!autoplay || !currentVideo) { queueMicrotask(() => setRemaining(null)); return }
-    const dur = durations[currentIndex] ?? currentVideo.duration ?? 0
-    console.log('[Series] timer using duration:', dur, 'from state:', durations[currentIndex], 'from article:', currentVideo.duration)
-    if (!dur) { queueMicrotask(() => setRemaining(null)); return }
-    const total = (dur + 5) * 1000
-    const start = Date.now()
-    queueMicrotask(() => setRemaining(Math.ceil(total / 1000)))
-    intervalRef.current = setInterval(() => {
-      const left = Math.ceil((total - (Date.now() - start)) / 1000)
-      setRemaining(left > 0 ? left : 0)
-    }, 1000)
-    timerRef.current = setTimeout(() => { playNext() }, total)
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      if (intervalRef.current) clearInterval(intervalRef.current)
+    if (!autoplay || !currentVideo) {
+      stopTimer()
+      remainingRef.current = null
+      setRemaining(null)
+      setPaused(false)
+      return
     }
-  }, [currentIndex, autoplay, durations, currentBvid, currentVideo, playNext])
+    const dur = durations[currentIndex] ?? currentVideo.duration ?? 0
+    if (!dur) {
+      stopTimer()
+      remainingRef.current = null
+      setRemaining(null)
+      setPaused(false)
+      return
+    }
+    // Reset and start a fresh countdown for the current episode
+    startTimer(dur + 5)
+    setPaused(false)
+    return () => { stopTimer() }
+  }, [currentIndex, autoplay, durations, currentBvid, currentVideo, startTimer, stopTimer])
 
   if (loading) return (
     <>
@@ -311,6 +357,12 @@ export default function SeriesDetailPage() {
                 <input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} />
                 自动连播
               </label>
+              {autoplay && remaining != null && (
+                <button onClick={togglePause}
+                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 ml-2">
+                  {paused ? '▶ 继续' : '⏸ 暂停'}
+                </button>
+              )}
             </div>
 
             {autoplay && remaining != null && (
