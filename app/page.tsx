@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import ArticleCard from '@/components/ArticleCard'
+import Link from 'next/link'
 import type { Article } from '@/lib/types'
 
 type TabType = '' | 'article' | 'video' | 'audio' | 'series'
@@ -57,6 +58,45 @@ export default function HomePage() {
     <>
       <Header />
       <main className="flex-1 w-full">
+        <section className="relative overflow-hidden bg-[#0a1f38]">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#0d2b4a] via-[#0f3a63] to-[#1a4a7a]" />
+          <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#f0c75e]/10 blur-3xl" />
+          <div className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-[#1a73e8]/10 blur-3xl" />
+          <div className="relative max-w-7xl mx-auto px-4 py-16 md:py-20">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[#ffd866] text-xs font-medium mb-5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffd866]" /> 系统化 · 可学习 · 能落地
+            </span>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight max-w-3xl">
+              在不确定时代，<br className="hidden md:block" />
+              把风险变成<span className="text-[#f0c75e]">可学习的应对能力</span>
+            </h1>
+            <p className="mt-5 text-white/70 text-base md:text-lg max-w-2xl leading-relaxed">
+              我们不预测市场，也不给投资建议。我们拆解真实困境中的应对方法，用系统化的策略、案例与认知训练，帮你在任何周期都稳住节奏、持续成长。
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link href="/?type=article" className="px-6 py-3 rounded-lg bg-[#f0c75e] text-[#0d2b4a] text-sm font-bold hover:bg-[#ffd866] transition-colors shadow-lg shadow-[#f0c75e]/20">
+                开始学习
+              </Link>
+              <Link href="/?type=series" className="px-6 py-3 rounded-lg bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors border border-white/15">
+                浏览实战合集
+              </Link>
+            </div>
+            <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl">
+              {[
+                { n: '应对方法', d: '而非投资建议' },
+                { n: '系统课程', d: '从认知到实战' },
+                { n: '真实案例', d: '可复用经验' },
+                { n: '持续更新', d: '紧跟变化' },
+              ].map(item => (
+                <div key={item.n} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+                  <p className="text-[#ffd866] font-bold text-lg">{item.n}</p>
+                  <p className="text-white/55 text-xs mt-0.5">{item.d}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
             {tabs.map(t => (

@@ -57,7 +57,12 @@ export default function Header() {
                 </div>
               )}
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link href="/login" className="text-sm text-[#f0c75e]/90 hover:text-[#f0c75e] px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors font-medium">登录</Link>
+              <Link href="/register" className="text-sm bg-[#f0c75e] text-[#0d2b4a] px-4 py-1.5 rounded-md hover:bg-[#ffd866] transition-colors font-bold">注册</Link>
+            </div>
+          )}
         </div>
       </div>
     </header>

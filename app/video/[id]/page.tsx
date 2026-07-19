@@ -81,9 +81,12 @@ export default function VideoDetailPage() {
 
         <h1 className="text-2xl font-bold mb-3">{article.title}</h1>
 
-        <div className="flex items-center gap-3 text-sm text-gray-500 mb-4">
+        <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
           {article.category_name && <span className="bg-blue-50 text-[#1a73e8] px-2 py-0.5 rounded">{article.category_name}</span>}
           <span>{new Date(article.created_at).toLocaleDateString('zh-CN')}</span>
+        </div>
+
+        <div className="mb-5">
           <FavoriteButton type="video" id={String(article.id)} />
         </div>
 

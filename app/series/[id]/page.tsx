@@ -315,13 +315,15 @@ export default function SeriesDetailPage() {
 
         <h1 className="text-xl font-bold mb-1">{article.title}</h1>
         {article.category_name && (
-          <div className="flex items-center gap-3 text-sm text-gray-500 mb-4">
+          <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
             <span className="bg-blue-50 text-[#1a73e8] px-2 py-0.5 rounded">{article.category_name}</span>
             <span>{videos.length} 集</span>
             <span>{new Date(article.created_at).toLocaleDateString('zh-CN')}</span>
-            <FavoriteButton type="series" id={String(article.id)} />
           </div>
         )}
+        <div className="mb-5">
+          <FavoriteButton type="series" id={String(article.id)} />
+        </div>
 
         <div className="flex flex-col xl:flex-row gap-4">
           <div className="flex-1 min-w-0">
@@ -359,19 +361,19 @@ export default function SeriesDetailPage() {
               </button>
               <label className="flex items-center gap-1.5 text-sm text-gray-500 ml-auto cursor-pointer">
                 <input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} />
-                自动连播
+                本集播完自动连播
               </label>
               {autoplay && remaining != null && (
-                <button onClick={togglePause}
-                  className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 ml-2">
-                  {paused ? '▶ 继续' : '⏸ 暂停'}
+                <button onClick={() => setAutoplay(false)}
+                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500 ml-2">
+                  取消连播
                 </button>
               )}
             </div>
 
             {autoplay && remaining != null && (
               <p className="text-xs text-amber-600 mb-4">
-                本集约 {remaining} 秒后自动连播下一集{remaining <= 8 ? '…' : ''}
+                本集约 <span className="font-semibold">{remaining}</span> 秒后自动连播下一集{remaining <= 8 ? '…' : ''}（如需暂停视频请用播放器控件）
               </p>
             )}
 

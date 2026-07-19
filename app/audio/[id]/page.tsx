@@ -47,7 +47,6 @@ export default function AudioDetailPage() {
           <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-6">
             {article.category_name && <span className="bg-blue-50 text-[#1a73e8] px-2 py-0.5 rounded">{article.category_name}</span>}
             <span>{new Date(article.created_at).toLocaleDateString('zh-CN')}</span>
-            <FavoriteButton type="audio" id={String(article.id)} />
           </div>
           {article.audio_url && (
             <div className="max-w-xl mx-auto">
@@ -58,6 +57,9 @@ export default function AudioDetailPage() {
               </audio>
             </div>
           )}
+          <div className="mt-6">
+            <FavoriteButton type="audio" id={String(article.id)} />
+          </div>
         </div>
 
         {article.cover_image && (

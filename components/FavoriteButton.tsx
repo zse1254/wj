@@ -49,13 +49,14 @@ export default function FavoriteButton({ type, id }: { type: string; id: string 
       <button
         onClick={toggle}
         disabled={loading}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+        title={favorited ? '取消收藏' : '加入收藏'}
+        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
           favorited
-            ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
-            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+            ? 'bg-red-500 border-red-500 text-white hover:bg-red-600 shadow-sm'
+            : 'bg-white border-[#1a73e8] text-[#1a73e8] hover:bg-[#1a73e8] hover:text-white'
         }`}
       >
-        <span>{favorited ? '♥' : '♡'}</span>
+        <span className="text-base leading-none">{favorited ? '♥' : '♡'}</span>
         <span>{favorited ? '已收藏' : '收藏'}</span>
       </button>
       {limitMsg && <span className="text-xs text-red-500">{limitMsg}</span>}
