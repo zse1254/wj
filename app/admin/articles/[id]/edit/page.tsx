@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import type { BilibiliVideo } from '@/lib/bilibili'
+import { type BilibiliVideo, parseBilibiliHtml } from '@/lib/bilibili'
 
 export default function EditArticlePage() {
   const router = useRouter()
@@ -112,6 +112,38 @@ export default function EditArticlePage() {
           }
         }
       } catch {}
+    }
+
+    // 3b) CORS proxies — fetch HTML page, parse __INITIAL_STATE__ for per-page durations
+    if (bvid && seriesFromDeno) {
+      const pageUrl = `https://www.bilibili.com/video/${bvid}`
+      const proxies = [
+        (u: string) => `https://api.allorigins.cn/raw?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+        (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        (u: string) => `https://api.allorigins.io/raw?url=${encodeURIComponent(u)}`,
+      ]
+      for (const buildProxy of proxies) {
+        try {
+          const c = new AbortController()
+          const t = setTimeout(() => c.abort(), 8000)
+          const proxyRes = await fetch(buildProxy(pageUrl), { signal: c.signal }).finally(() => clearTimeout(t))
+          if (!proxyRes.ok) continue
+          const html = await proxyRes.text()
+          const parsed = parseBilibiliHtml(html, bvid)
+          if (parsed.series?.videos?.length) {
+            const byIndex: Record<number, number> = {}
+            parsed.series.videos.forEach((v, i) => { if (v.duration) byIndex[i] = v.duration })
+            if (Object.keys(byIndex).length > 0) {
+              seriesFromDeno = {
+                title: seriesFromDeno.title,
+                videos: seriesFromDeno.videos.map((v, i) => ({ ...v, duration: v.duration || byIndex[i] || 0 })),
+              }
+              break
+            }
+          }
+        } catch { continue }
+      }
     }
 
     if (videoFromDeno) {
