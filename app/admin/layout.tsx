@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/categories', label: '分类管理', icon: '🏷️' },
   { href: '/admin/vip-cards', label: 'VIP 卡密', icon: '💎' },
   { href: '/admin/invite-codes', label: '邀请码', icon: '🔑' },
+  { href: '/admin/settings', label: '系统设置', icon: '⚙️' },
   { href: '/admin/users', label: '用户管理', icon: '👥' },
 ]
 

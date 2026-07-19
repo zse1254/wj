@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
@@ -12,6 +13,14 @@ export default function ProfilePage() {
   const [code, setCode] = useState('')
   const [redeemMsg, setRedeemMsg] = useState('')
   const [redeeming, setRedeeming] = useState(false)
+  const [favorites, setFavorites] = useState<{ id: string; itemType: string; itemId: string; title: string; coverImage: string }[]>([])
+  const [favLoading, setFavLoading] = useState(true)
+
+  const loadFavorites = () => {
+    fetch('/api/favorites').then(r => r.json()).then(res => {
+      if (res.success) setFavorites(res.data)
+    }).finally(() => setFavLoading(false))
+  }
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(res => {
@@ -19,6 +28,10 @@ export default function ProfilePage() {
       else router.push('/login')
     }).finally(() => setLoading(false))
   }, [router])
+
+  useEffect(() => {
+    if (user) loadFavorites()
+  }, [user])
 
   const handleRedeem = async () => {
     if (!code.trim()) return
@@ -97,6 +110,46 @@ export default function ProfilePage() {
             <p className={`mt-3 text-sm ${redeemMsg === '兑换成功！' ? 'text-green-600' : 'text-red-500'}`}>
               {redeemMsg}
             </p>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h2 className="text-lg font-semibold mb-4">我的收藏</h2>
+          {favLoading ? (
+            <p className="text-sm text-gray-400">加载中...</p>
+          ) : favorites.length === 0 ? (
+            <p className="text-sm text-gray-500">还没有收藏任何内容</p>
+          ) : (
+            <div className="space-y-2">
+              {favorites.map(f => (
+                <div key={f.id} className="flex items-center gap-3 p-3 border rounded-lg">
+                  {f.coverImage && (
+                    <img src={f.coverImage} alt="" className="w-12 h-9 object-cover rounded shrink-0" referrerPolicy="no-referrer" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <Link href={`/${f.itemType}/${f.itemId}`} className="text-sm text-gray-800 hover:text-[#1a73e8] line-clamp-1 block">
+                      {f.title}
+                    </Link>
+                    <span className="text-xs text-gray-400">
+                      {f.itemType === 'article' ? '文章' : f.itemType === 'video' ? '视频' : f.itemType === 'audio' ? '音频' : '合集'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/favorites', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: f.itemType, id: f.itemId }),
+                      })
+                      loadFavorites()
+                    }}
+                    className="text-xs text-red-500 hover:underline shrink-0"
+                  >
+                    取消
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </main>

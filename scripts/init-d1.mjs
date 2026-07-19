@@ -43,7 +43,7 @@ const tables = [
   `CREATE TABLE IF NOT EXISTS vip_cards (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, duration_days INTEGER NOT NULL,
     is_used INTEGER DEFAULT 0, used_by TEXT, used_at TEXT, created_by TEXT,
-    created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (used_by) REFERENCES users(id)
+    note TEXT, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (used_by) REFERENCES users(id)
   );`,
   `CREATE TABLE IF NOT EXISTS invite_codes (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL,
@@ -51,6 +51,13 @@ const tables = [
     enabled INTEGER NOT NULL DEFAULT 1, note TEXT,
     created_by TEXT, created_at TEXT DEFAULT (datetime('now')),
     expires_at TEXT
+  );`,
+  `CREATE TABLE IF NOT EXISTS favorites (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+    item_type TEXT NOT NULL, item_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE (user_id, item_type, item_id)
   );`,
   `CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY, value TEXT
@@ -71,7 +78,7 @@ run(addColFile);
 try { unlinkSync(addColFile); } catch {}
 
 console.log("\n=== Seeding settings ===");
-const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0');`;
+const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10');`;
 const setFile = `tmp_set_${Date.now()}.sql`;
 writeFileSync(setFile, setSql, "utf8");
 run(setFile);

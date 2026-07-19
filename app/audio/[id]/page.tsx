@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import FavoriteButton from '@/components/FavoriteButton'
 import type { Article } from '@/lib/types'
 
 export default function AudioDetailPage() {
@@ -46,6 +47,7 @@ export default function AudioDetailPage() {
           <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-6">
             {article.category_name && <span className="bg-blue-50 text-[#1a73e8] px-2 py-0.5 rounded">{article.category_name}</span>}
             <span>{new Date(article.created_at).toLocaleDateString('zh-CN')}</span>
+            <FavoriteButton type="audio" id={String(article.id)} />
           </div>
           {article.audio_url && (
             <div className="max-w-xl mx-auto">

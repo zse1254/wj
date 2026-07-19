@@ -26,6 +26,7 @@ export default function AdminInviteCodesPage() {
   const [inviteRequired, setInviteRequired] = useState(false)
   const [savingSetting, setSavingSetting] = useState(false)
   const [msg, setMsg] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const fetchCodes = () => {
     fetch('/api/admin/invite-codes').then(r => r.json()).then(res => {
@@ -90,23 +91,56 @@ export default function AdminInviteCodesPage() {
     setSavingSetting(false)
   }
 
-  const exportCsv = () => {
-    const rows = codes.map(c => [c.code, c.max_uses, c.used_count, c.enabled ? '启用' : '禁用', c.note || '', c.expires_at || '', c.created_at].join(','))
+  const exportCsv = (mode: 'selected' | 'all' | 'used') => {
+    let target = codes
+    if (mode === 'selected') target = codes.filter(c => selected.has(c.id))
+    else if (mode === 'used') target = codes.filter(c => c.used_count >= c.max_uses)
+    if (mode === 'selected' && target.length === 0) { alert('请先勾选要导出的邀请码'); return }
+    const rows = target.map(c => [c.code, c.max_uses, c.used_count, c.enabled ? '启用' : '禁用', c.note || '', c.expires_at || '', c.created_at].join(','))
     const csv = 'code,max_uses,used_count,status,note,expires_at,created_at\n' + rows.join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'invite_codes.csv'
+    a.download = `invite_codes_${mode}_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const deleteUsed = async () => {
+    if (!confirm('确定删除所有已用完的邀请码？')) return
+    await fetch('/api/admin/invite-codes/export', { method: 'DELETE' })
+    setSelected(new Set())
+    fetchCodes()
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  const allSelected = codes.length > 0 && codes.every(c => selected.has(c.id))
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(codes.map(c => c.id)))
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">邀请码管理</h1>
-        <button onClick={exportCsv} className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">导出 CSV</button>
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <button onClick={() => exportCsv('selected')} className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">
+              导出选中 ({selected.size})
+            </button>
+          )}
+          <button onClick={() => exportCsv('used')} className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">导出已用完</button>
+          <button onClick={() => exportCsv('all')} className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200">导出全部</button>
+          <button onClick={deleteUsed} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm hover:bg-red-100">删除已用完</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 space-y-4">
@@ -163,6 +197,9 @@ export default function AdminInviteCodesPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500">
             <tr>
+              <th className="px-3 py-3 w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} title="全选" />
+              </th>
               <th className="text-left px-4 py-3 font-medium">邀请码</th>
               <th className="text-left px-4 py-3 font-medium">使用</th>
               <th className="text-left px-4 py-3 font-medium">状态</th>
@@ -173,11 +210,14 @@ export default function AdminInviteCodesPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">加载中...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">加载中...</td></tr>
             ) : codes.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">暂无邀请码</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">暂无邀请码</td></tr>
             ) : codes.map(c => (
-              <tr key={c.id}>
+              <tr key={c.id} className={selected.has(c.id) ? 'bg-blue-50' : ''}>
+                <td className="px-3 py-3">
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} />
+                </td>
                 <td className="px-4 py-3 font-mono">{c.code}</td>
                 <td className="px-4 py-3">{c.used_count} / {c.max_uses}</td>
                 <td className="px-4 py-3">
