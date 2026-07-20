@@ -54,9 +54,13 @@ function initTablesLocal(d: any, fs: any, DB_PATH: string) {
     summary TEXT NOT NULL DEFAULT '', cover_image TEXT, type TEXT NOT NULL DEFAULT 'article',
     video_url TEXT, audio_url TEXT, bilibili_url TEXT, is_m3u8 INTEGER DEFAULT 0,
     category_id TEXT, published INTEGER DEFAULT 0, author_id TEXT,
+    stream_data TEXT, stream_expires_at TEXT,
     created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (author_id) REFERENCES users(id)
   )`)
+  // Add missing columns (existing databases)
+  try { d.run("ALTER TABLE articles ADD COLUMN stream_data TEXT") } catch {}
+  try { d.run("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT") } catch {}
   d.run(`CREATE TABLE IF NOT EXISTS vip_cards (
     id TEXT PRIMARY KEY, code TEXT UNIQUE NOT NULL, duration_days INTEGER NOT NULL,
     is_used INTEGER DEFAULT 0, used_by TEXT, used_at TEXT, created_by TEXT,
