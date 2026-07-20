@@ -40,9 +40,8 @@ export default function VideoDetailPage() {
   const bvid = article.bilibili_url ? extractBilibiliBvid(article.bilibili_url) : null
   const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
-  function renderPlayer() {
-    // 方案1: 有直链流 → 嵌入我们的播放器
-    if (article.has_stream) {
+  function renderPlayer(a: Article) {
+    if (a.has_stream) {
       return (
         <iframe
           src={`/play/${articleId}`}
@@ -55,7 +54,18 @@ export default function VideoDetailPage() {
       )
     }
 
-    // 方案2: B站 iframe 兜底
+    if (a.video_url) {
+      return a.is_m3u8 ? (
+        <video controls className="w-full h-full" playsInline>
+          <source src={a.video_url} type="application/x-mpegURL" />
+        </video>
+      ) : (
+        <video controls className="w-full h-full" playsInline>
+          <source src={a.video_url} type="video/mp4" />
+        </video>
+      )
+    }
+
     if (bvid) {
       return (
         <iframe
@@ -73,19 +83,6 @@ export default function VideoDetailPage() {
       )
     }
 
-    // 方案3: 直链视频
-    if (article.video_url) {
-      return article.is_m3u8 ? (
-        <video controls className="w-full h-full" playsInline>
-          <source src={article.video_url} type="application/x-mpegURL" />
-        </video>
-      ) : (
-        <video controls className="w-full h-full" playsInline>
-          <source src={article.video_url} type="video/mp4" />
-        </video>
-      )
-    }
-
     return null
   }
 
@@ -96,7 +93,7 @@ export default function VideoDetailPage() {
         <Link href="/" className="text-sm text-gray-500 hover:text-[#1a73e8] mb-4 inline-block">&larr; 返回首页</Link>
 
         <div className="relative aspect-video rounded-xl overflow-hidden mb-6 bg-black">
-          {renderPlayer()}
+          {article && renderPlayer(article)}
         </div>
 
         <h1 className="text-2xl font-bold mb-3">{article.title}</h1>
