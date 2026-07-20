@@ -2,7 +2,8 @@ import { query } from '@/lib/db'
 
 function sanitize(article: Record<string, unknown>) {
   const { stream_data, stream_expires_at, ...rest } = article
-  return rest
+  const hasStream = !!(stream_data && stream_expires_at && new Date(stream_expires_at as string) > new Date())
+  return { ...rest, has_stream: hasStream } as any
 }
 
 export async function GET(

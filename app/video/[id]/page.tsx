@@ -12,11 +12,12 @@ import type { Article } from '@/lib/types'
 export default function VideoDetailPage() {
   const params = useParams()
   const [article, setArticle] = useState<Article | null>(null)
+  const [articleId, setArticleId] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
-      if (res.success) setArticle(res.data)
+      if (res.success) { setArticle(res.data); setArticleId(res.data.id) }
     }).finally(() => setLoading(false))
   }, [params.id])
 
@@ -39,46 +40,64 @@ export default function VideoDetailPage() {
   const bvid = article.bilibili_url ? extractBilibiliBvid(article.bilibili_url) : null
   const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
+  function renderPlayer() {
+    // 方案1: 有直链流 → 嵌入我们的播放器
+    if (article.has_stream) {
+      return (
+        <iframe
+          src={`/play/${articleId}`}
+          allowFullScreen
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            width: '100%', height: '100%', border: 'none',
+          }}
+        />
+      )
+    }
+
+    // 方案2: B站 iframe 兜底
+    if (bvid) {
+      return (
+        <iframe
+          src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0`}
+          scrolling="no"
+          frameBorder="0"
+          allowFullScreen
+          referrerPolicy="no-referrer"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            width: '100%', height: '100%', border: 'none',
+          }}
+        />
+      )
+    }
+
+    // 方案3: 直链视频
+    if (article.video_url) {
+      return article.is_m3u8 ? (
+        <video controls className="w-full h-full" playsInline>
+          <source src={article.video_url} type="application/x-mpegURL" />
+        </video>
+      ) : (
+        <video controls className="w-full h-full" playsInline>
+          <source src={article.video_url} type="video/mp4" />
+        </video>
+      )
+    }
+
+    return null
+  }
+
   return (
     <>
       <Header />
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
         <Link href="/" className="text-sm text-gray-500 hover:text-[#1a73e8] mb-4 inline-block">&larr; 返回首页</Link>
 
-        {bvid ? (
-          <div className="bilibili-player rounded-xl overflow-hidden mb-6 bg-black">
-            <iframe
-              src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0`}
-              scrolling="no"
-              frameBorder="0"
-              allowFullScreen
-              referrerPolicy="no-referrer"
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                border: 'none',
-              }}
-            />
-          </div>
-        ) : article.video_url ? (
-          <div className="relative aspect-video rounded-xl overflow-hidden mb-6 bg-black">
-            {article.is_m3u8 ? (
-              <video controls className="w-full h-full" playsInline>
-                <source src={article.video_url} type="application/x-mpegURL" />
-                <p>您的浏览器不支持 HLS 视频播放，请使用最新版浏览器或下载视频观看。</p>
-              </video>
-            ) : (
-              <video controls className="w-full h-full" playsInline>
-                <source src={article.video_url} type="video/mp4" />
-                <p>您的浏览器不支持视频播放。</p>
-              </video>
-            )}
-          </div>
-        ) : null}
+        <div className="relative aspect-video rounded-xl overflow-hidden mb-6 bg-black">
+          {renderPlayer()}
+        </div>
 
         <h1 className="text-2xl font-bold mb-3">{article.title}</h1>
 

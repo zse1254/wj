@@ -17,6 +17,7 @@ export interface Article {
   author_id: string | null
   author: string | null
   stream_data: string | null
+  has_stream?: boolean
   created_at: string
   updated_at: string
 }

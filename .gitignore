@@ -51,3 +51,7 @@ public/uploads/*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# APK analysis (too large, not needed for deployment)
+*.apk
+apk_extract/
