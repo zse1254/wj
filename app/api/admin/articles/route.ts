@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { DENO_PROXIES } from '@/lib/deno-proxy'
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^\w\u4e00-\u9fff]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'post'
@@ -53,8 +55,36 @@ async function ensureColumns() {
     "ALTER TABLE articles ADD COLUMN published INTEGER DEFAULT 0",
     "ALTER TABLE articles ADD COLUMN author_id TEXT",
     "ALTER TABLE articles ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))",
+    "ALTER TABLE articles ADD COLUMN stream_data TEXT",
+    "ALTER TABLE articles ADD COLUMN stream_expires_at TEXT",
   ]) {
     try { await d1.prepare(sql).all() } catch {}
+  }
+}
+
+async function fetchAndStoreStream(articleId: string, bilibiliUrl: string) {
+  const bvid = extractBilibiliBvid(bilibiliUrl)
+  if (!bvid) return
+  const errors: string[] = []
+  for (const proxyUrl of DENO_PROXIES) {
+    try {
+      const res = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'playurl', bvid }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) { errors.push(`${proxyUrl}: ${res.status}`); continue }
+      const data = await res.json()
+      if (!data.success) { errors.push(`${proxyUrl}: ${data.error}`); continue }
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
+        JSON.stringify(data.data), expiresAt, articleId,
+      ])
+      return
+    } catch (err: any) {
+      errors.push(`${proxyUrl}: ${err.message}`)
+    }
   }
 }
 
@@ -109,6 +139,10 @@ async function doInsert(body: any, admin: any, id: string) {
     ]
   )
   await syncCategories(id, body.category_ids)
+  // 异步获取直链
+  if (body.bilibili_url && (body.type === 'video' || body.type === 'series')) {
+    fetchAndStoreStream(id, body.bilibili_url).catch(() => {})
+  }
 }
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { DENO_PROXIES } from '@/lib/deno-proxy'
 
 export async function GET(
   _request: NextRequest,
@@ -34,6 +36,29 @@ export async function GET(
     const msg = err instanceof Error ? err.message : 'Server error'
     const status = msg === 'Unauthorized' ? 401 : msg === 'Forbidden' ? 403 : 500
     return Response.json({ success: false, error: msg }, { status })
+  }
+}
+
+async function fetchAndStoreStream(articleId: string, bilibiliUrl: string) {
+  const bvid = extractBilibiliBvid(bilibiliUrl)
+  if (!bvid) return
+  for (const proxyUrl of DENO_PROXIES) {
+    try {
+      const res = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'playurl', bvid }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) continue
+      const data = await res.json()
+      if (!data.success) continue
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
+        JSON.stringify(data.data), expiresAt, articleId,
+      ])
+      return
+    } catch {}
   }
 }
 
@@ -93,6 +118,11 @@ export async function PUT(
           }
         }
       } catch {}
+    }
+
+    // 异步获取直链
+    if (body.bilibili_url && (body.type === 'video' || body.type === 'series')) {
+      fetchAndStoreStream(id, body.bilibili_url).catch(() => {})
     }
 
     return Response.json({ success: true })

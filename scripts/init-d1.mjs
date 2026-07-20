@@ -39,6 +39,7 @@ const tables = [
     summary TEXT NOT NULL DEFAULT '', cover_image TEXT, type TEXT NOT NULL DEFAULT 'article',
     video_url TEXT, audio_url TEXT, bilibili_url TEXT, is_m3u8 INTEGER DEFAULT 0,
     category_id TEXT, published INTEGER DEFAULT 0, author_id TEXT,
+    stream_data TEXT, stream_expires_at TEXT,
     created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (author_id) REFERENCES users(id)
   );`,
@@ -103,11 +104,17 @@ for (const sql of tables) {
   try { unlinkSync(tmpFile); } catch {}
 }
 
-console.log("\n=== Adding invited_by column to users (if missing) ===");
-const addColFile = `tmp_addcol_${Date.now()}.sql`;
-writeFileSync(addColFile, `ALTER TABLE users ADD COLUMN invited_by TEXT;`);
-run(addColFile);
-try { unlinkSync(addColFile); } catch {}
+console.log("\n=== Adding missing columns ===");
+for (const sql of [
+  "ALTER TABLE users ADD COLUMN invited_by TEXT;",
+  "ALTER TABLE articles ADD COLUMN stream_data TEXT;",
+  "ALTER TABLE articles ADD COLUMN stream_expires_at TEXT;",
+]) {
+  const f = `tmp_addcol_${Date.now()}.sql`;
+  writeFileSync(f, sql, "utf8");
+  run(f);
+  try { unlinkSync(f); } catch {}
+}
 
 console.log("\n=== Seeding settings ===");
 const setSql = `INSERT OR IGNORE INTO settings (key, value) VALUES ('invite_required', '0'), ('max_favorites', '10'), ('site_slogan', ''), ('footer_text', ''), ('seo_title', ''), ('seo_description', ''), ('seo_keywords', ''), ('member_quota', '10'), ('contact_text', ''), ('contact_qrcode', ''), ('space_enabled', '1');`;

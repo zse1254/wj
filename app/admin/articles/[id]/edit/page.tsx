@@ -350,6 +350,16 @@ export default function EditArticlePage() {
                 🔄 修复合集
               </button>
             )}
+            {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
+              <button type="button" onClick={async () => {
+                const res = await fetch(`/api/admin/articles/${params.id}/refresh-stream`, { method: 'POST' })
+                const data = await res.json()
+                alert(data.success ? '直链已刷新' : (data.error || '刷新失败'))
+              }}
+                className="text-sm text-blue-600 hover:underline px-2">
+                刷新直链
+              </button>
+            )}
             <button type="button" onClick={() => router.back()} className="px-4 py-2 border rounded-lg text-sm">取消</button>
             <button type="submit" disabled={saving}
               className="bg-[#1a73e8] text-white px-6 py-2 rounded-lg text-sm hover:bg-[#1557b0] disabled:opacity-50">
@@ -357,8 +367,22 @@ export default function EditArticlePage() {
             </button>
           </div>
         </div>
-      </form>
 
+        {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm flex items-center gap-3">
+            <span className="text-green-700 font-medium shrink-0">直链链接</span>
+            <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
+              className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+            <button type="button" onClick={() => {
+              const url = `${window.location.origin}/play/${params.id}`
+              navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
+            }}
+              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs shrink-0">
+              复制
+            </button>
+          </div>
+        )}
+      </form>
       {seriesInfo && (
         <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">
           <h2 className="text-lg font-bold mb-1">检测到合集：{seriesInfo.title}</h2>

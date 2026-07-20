@@ -1,8 +1,8 @@
 import { query } from '@/lib/db'
 
-async function withCategories(article: Record<string, unknown>) {
-  const rows = await query('SELECT category_id FROM article_categories WHERE article_id = ?', [article.id])
-  return { ...article, category_ids: rows.map(r => r.category_id) }
+function sanitize(article: Record<string, unknown>) {
+  const { stream_data, stream_expires_at, ...rest } = article
+  return rest
 }
 
 export async function GET(
@@ -21,7 +21,8 @@ export async function GET(
     if (articles.length === 0) {
       return Response.json({ success: false, error: 'Article not found' }, { status: 404 })
     }
-    return Response.json({ success: true, data: await withCategories(articles[0]) })
+    const rows = await query('SELECT category_id FROM article_categories WHERE article_id = ?', [articles[0].id])
+    return Response.json({ success: true, data: { ...sanitize(articles[0]), category_ids: rows.map(r => r.category_id) } })
   } catch {
     return Response.json({ success: false, error: 'Server error' }, { status: 500 })
   }

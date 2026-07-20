@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server'
 import { query } from '@/lib/db'
 
+function sanitize(a: any) {
+  const { stream_data, stream_expires_at, ...rest } = a
+  return rest
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl
@@ -45,7 +50,7 @@ export async function GET(request: NextRequest) {
     const countResult = await query(countSql, countParams)
     const total = countResult[0]?.total as number || 0
 
-    return Response.json({ success: true, data: { articles, total, page, limit } })
+    return Response.json({ success: true, data: { articles: articles.map(sanitize), total, page, limit } })
   } catch (err) {
     return Response.json({ success: false, error: 'Server error' }, { status: 500 })
   }

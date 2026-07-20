@@ -16,6 +16,7 @@ export interface Article {
   published: boolean
   author_id: string | null
   author: string | null
+  stream_data: string | null
   created_at: string
   updated_at: string
 }
