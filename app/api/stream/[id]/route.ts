@@ -77,7 +77,13 @@ export async function GET(
     const { id } = await context.params
     const cdnIndex = parseInt(request.nextUrl.searchParams.get('cdn') || '0', 10)
 
-    const articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id])
+    let articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id]).catch(() => [])
+    if (!articles.length) {
+      // D1 may be missing stream_data column → auto-migrate
+      try { await query("ALTER TABLE articles ADD COLUMN stream_data TEXT", []) } catch {}
+      try { await query("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT", []) } catch {}
+      articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id])
+    }
     if (!articles.length) {
       return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } })
     }

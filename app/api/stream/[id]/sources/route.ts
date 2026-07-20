@@ -64,7 +64,12 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params
-    const articles = await query('SELECT stream_data FROM articles WHERE id = ?', [id])
+    let articles = await query('SELECT stream_data FROM articles WHERE id = ?', [id]).catch(() => [])
+    if (!articles.length) {
+      try { await query("ALTER TABLE articles ADD COLUMN stream_data TEXT", []) } catch {}
+      try { await query("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT", []) } catch {}
+      articles = await query('SELECT stream_data FROM articles WHERE id = ?', [id])
+    }
     if (!articles.length) {
       return Response.json({ success: false, error: 'Not found' }, { status: 404 })
     }
