@@ -1,11 +1,35 @@
 import { NextRequest } from 'next/server'
 import { query } from '@/lib/db'
 
-function getUrl(stream: any, cdnIndex: number): string {
+// 把 URL 的 host 替换为指定 CDN host
+function replaceHost(url: string, newHost: string): string {
+  try {
+    const u = new URL(url)
+    u.host = newHost
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
+// 根据 cdn 参数取出最终 URL
+//   - cdn=0 / 空        → 原 base_url
+//   - cdn=1..N         → 第 N 个 backup_url（1-indexed）
+//   - cdn=host:xxx     → 把 host 替换为 xxx（应用所有 base/backup）
+function getUrl(stream: any, cdnParam: string): string {
   const base = stream.baseUrl || stream.base_url || ''
-  if (cdnIndex === 0) return base
-  const backups = stream.backupUrl || stream.backup_url || []
-  return backups[cdnIndex - 1] || base
+  if (!cdnParam || cdnParam === '0' || cdnParam === 'orig') return base
+  if (cdnParam.startsWith('host:')) {
+    const newHost = cdnParam.slice(5)
+    return replaceHost(base, newHost)
+  }
+  const idx = parseInt(cdnParam, 10)
+  if (!isNaN(idx) && idx > 0) {
+    const backups = stream.backupUrl || stream.backup_url || []
+    const u = backups[idx - 1] || backups[0] || base
+    return u
+  }
+  return base
 }
 
 function getSegmentBase(stream: any): { init: string; index: string } {
@@ -18,7 +42,7 @@ function getSegmentBase(stream: any): { init: string; index: string } {
   return { init: '0-131072', index: '0-131072' }
 }
 
-function buildMpd(data: any, cdnIndex: number): string {
+function buildMpd(data: any, cdnParam: string): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
   const streams = data.dash?.video || []
@@ -29,10 +53,10 @@ function buildMpd(data: any, cdnIndex: number): string {
     const codecs = v.codecs || 'avc1.64001F'
     const w = v.width || 1920
     const h = v.height || 1080
-    const bw = v.bandwidth || 1000000
+    const bw = v.bandwidth || v.bandWidth || 1000000
     return `
-    <Representation id="${v.id || i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(getUrl(v, cdnIndex))}</BaseURL>
+    <Representation id="v-${v.id || i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
+      <BaseURL>${escapeXml(getUrl(v, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -42,10 +66,10 @@ function buildMpd(data: any, cdnIndex: number): string {
   const audioReps = audioStreams.map((a: any, i: number) => {
     const sb = getSegmentBase(a)
     const codecs = a.codecs || 'mp4a.40.2'
-    const bw = a.bandwidth || 128000
+    const bw = a.bandwidth || a.bandWidth || 128000
     return `
-    <Representation id="${a.id || i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(getUrl(a, cdnIndex))}</BaseURL>
+    <Representation id="a-${a.id || i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
+      <BaseURL>${escapeXml(getUrl(a, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -66,7 +90,12 @@ function buildMpd(data: any, cdnIndex: number): string {
 }
 
 function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+  return s
+    .replace(/&/g, '\x26amp;')
+    .replace(/</g, '\x26lt;')
+    .replace(/>/g, '\x26gt;')
+    .replace(/"/g, '\x26quot;')
+    .replace(/'/g, '\x26apos;')
 }
 
 export async function GET(
@@ -75,11 +104,10 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params
-    const cdnIndex = parseInt(request.nextUrl.searchParams.get('cdn') || '0', 10)
+    const cdnParam = request.nextUrl.searchParams.get('cdn') || '0'
 
-    let articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id]).catch(() => [])
+    let articles: any[] = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id]).catch(() => [])
     if (!articles.length) {
-      // D1 may be missing stream_data column → auto-migrate
       try { await query("ALTER TABLE articles ADD COLUMN stream_data TEXT", []) } catch {}
       try { await query("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT", []) } catch {}
       articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id])
@@ -98,8 +126,7 @@ export async function GET(
     }
 
     const streamData = JSON.parse(article.stream_data)
-    console.error('[stream] streamData keys:', Object.keys(streamData), 'has dash:', !!streamData.dash)
-    const mpd = buildMpd(streamData, cdnIndex)
+    const mpd = buildMpd(streamData, cdnParam)
 
     return new Response(mpd, {
       status: 200,
@@ -111,6 +138,6 @@ export async function GET(
     })
   } catch (err: any) {
     console.error('[stream] error:', err)
-    return new Response(JSON.stringify({ error: err.message, stack: err.stack }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 }

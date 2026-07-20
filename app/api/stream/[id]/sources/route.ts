@@ -1,61 +1,57 @@
 import { NextRequest } from 'next/server'
 import { query } from '@/lib/db'
 
-const CDN_LABELS: Record<string, string> = {
-  'upos-sz-mirrorcos': '腾讯云 COS',
-  'upos-sz-mirrorali': '阿里云 OSS',
-  'upos-sz-mirrorhwer': '华为云 OBS',
-  'upos-sz-mirrorbd': '百度云 BOS',
-  'upos-sz-mirrorks3': '金山云 KS3',
-  'upos-sz-upcdn': 'B站 UPCDN',
-  'upos-sz-mirror': 'B站默认',
-}
+// 全部已知 B站 CDN 主机（源自 PiliPalaX APK 的 CDNServiceHost._hostList）
+const CDN_HOSTS: { host: string; label: string }[] = [
+  { host: 'upos-sz-mirrorcos.bilivideo.com',   label: '腾讯 COS' },
+  { host: 'upos-sz-mirrorcosb.bilivideo.com',  label: '腾讯 COS B' },
+  { host: 'upos-sz-mirrorcosov.bilivideo.com', label: '腾讯 OV' },
+  { host: 'upos-sz-mirrorcoso1.bilivideo.com', label: '腾讯 O1' },
+  { host: 'upos-sz-mirrorali.bilivideo.com',   label: '阿里云' },
+  { host: 'upos-sz-mirroralib.bilivideo.com',  label: '阿里 B' },
+  { host: 'upos-sz-mirroralio1.bilivideo.com', label: '阿里 O1' },
+  { host: 'upos-sz-mirroraliov.bilivideo.com', label: '阿里 OV' },
+  { host: 'upos-sz-mirrorhw.bilivideo.com',    label: '华为云' },
+  { host: 'upos-sz-mirrorhwb.bilivideo.com',   label: '华为 B' },
+  { host: 'upos-sz-mirrorhwo1.bilivideo.com',  label: '华为 O1' },
+  { host: 'upos-sz-mirrorhwer.bilivideo.com',  label: '华为 ER' },
+  { host: 'upos-sz-mirror08h.bilivideo.com',   label: 'B站 08h' },
+  { host: 'upos-sz-mirror08c.bilivideo.com',   label: 'B站 08c' },
+  { host: 'upos-sz-mirror08ct.bilivideo.com',  label: 'B站 08ct' },
+  { host: 'upos-tf-all-tx.bilivideo.com',      label: 'TF-腾讯全节点' },
+  { host: 'upos-tf-all-hw.bilivideo.com',      label: 'TF-华为全节点' },
+  { host: 'upos-hz-mirrorakam.akamaized.net',  label: 'Akamai' },
+  { host: 'cn-hk-eq-bcache-01.bilivideo.com',  label: '香港节点' },
+]
 
-function labelFromUrl(url: string): string {
-  try {
-    const host = new URL(url).hostname
-    for (const [key, label] of Object.entries(CDN_LABELS)) {
-      if (host.includes(key)) return label
-    }
-    return host.split('.')[0] || host
-  } catch {
-    return '未知'
+// 计算给定 baseURL 可替换的全部 CDN；返回 [{key,label}] 其中 key=index+1 留给 backup_url
+function extractCdns(streamData: any): { key: string; label: string; index: number }[] {
+  const result: { key: string; label: string; index: number }[] = []
+  // base_url 用 index=0，随后是各 backup_url（index 1..N）
+  // 注意：所有 URL 的 host 我们都能替换为下面的 CDN 主机列表
+  const first = streamData?.dash?.video?.[0] || streamData?.dash?.audio?.[0]
+  if (!first) return result
+  const base = first.baseUrl || first.base_url || ''
+  const backups = first.backupUrl || first.backup_url || []
+  const urls = [base, ...backups].filter(Boolean)
+
+  // 列出原始响应里的 backup（按 index 顺序）
+  for (let i = 0; i < urls.length; i++) {
+    let label = `原始 ${i}`
+    try {
+      const host = new URL(urls[i]).hostname
+      const found = CDN_HOSTS.find(h => host.includes(h.host))
+      if (found) label = found.label
+      else label = host
+    } catch {}
+    result.push({ key: i === 0 ? 'orig' : `b${i}`, label, index: i })
   }
-}
 
-function extractCdns(streamData: any): { name: string; label: string; index: number }[] {
-  const seen = new Map<string, number>()
-  const result: { name: string; label: string; index: number }[] = []
-
-  const allStreams = [
-    ...(streamData.dash?.video || []),
-    ...(streamData.dash?.audio || []),
-  ]
-
-  for (const s of allStreams) {
-    const base = s.baseUrl || s.base_url || ''
-    const backups = s.backupUrl || s.backup_url || []
-    const urls = [base, ...backups].filter(Boolean)
-    for (let i = 0; i < urls.length; i++) {
-      const host = extractCdnKey(urls[i])
-      if (!seen.has(host)) {
-        seen.set(host, i)
-        result.push({ name: host, label: labelFromUrl(urls[i]), index: i })
-      }
-    }
+  // 追加「替换 host」选项（key=host:xxx），代表强制替换为指定 CDN 主机
+  for (const h of CDN_HOSTS) {
+    result.push({ key: `host:${h.host}`, label: `替换:${h.label}`, index: -1 })
   }
-
   return result
-}
-
-function extractCdnKey(url: string): string {
-  try {
-    const host = new URL(url).hostname
-    const parts = host.split('.')
-    return parts.slice(0, -2).join('.') || host
-  } catch {
-    return url
-  }
 }
 
 export async function GET(
@@ -64,7 +60,7 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params
-    let articles = await query('SELECT stream_data FROM articles WHERE id = ?', [id]).catch(() => [])
+    let articles: any[] = await query('SELECT stream_data FROM articles WHERE id = ?', [id]).catch(() => [])
     if (!articles.length) {
       try { await query("ALTER TABLE articles ADD COLUMN stream_data TEXT", []) } catch {}
       try { await query("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT", []) } catch {}

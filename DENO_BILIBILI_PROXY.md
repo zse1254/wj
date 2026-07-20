@@ -44,13 +44,27 @@ function biliHeaders(): Record<string, string> {
 
 let wbiCache: { mix_key: string; expires_at: number } | null = null;
 
+// B站官方字符重排表（64 项，生成 mixinKey 时只用前 32 项取字符）
+const MIXIN_KEY_ENC_TAB = [
+  46, 47, 18,  2, 53,  8, 23, 32, 15, 50, 10, 31, 58,  3, 45, 35,
+  27, 43,  5, 49, 33,  9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+  37, 48,  7, 16, 24, 55, 40, 61, 26, 17,  0,  1, 60, 51, 30,  4,
+  22, 25, 54, 21, 56, 59,  6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+];
+
+function getMixinKey(imgKey: string, subKey: string): string {
+  const raw = imgKey + subKey;  // imgKey 在前，总长 64
+  return MIXIN_KEY_ENC_TAB.map(n => raw[n]).join("").slice(0, 32);
+}
+
 async function getWbiKeys(): Promise<{ img_key: string; sub_key: string }> {
   const res = await fetch("https://api.bilibili.com/x/web-interface/nav", { headers: biliHeaders() });
   const json = await res.json();
-  if (json.code !== 0) throw new Error("获取 Wbi 密钥失败: " + (json.message || ""));
+  // nav 未登录时返回 code=-101，但 wbi_img 仍然有效，可直接取用
   const data = json.data;
-  const img = data.wbi_img?.img_url || "";
-  const sub = data.wbi_img?.sub_url || "";
+  const img = data?.wbi_img?.img_url || "";
+  const sub = data?.wbi_img?.sub_url || "";
+  if (!img || !sub) throw new Error("获取 Wbi 密钥失败: " + (json.message || JSON.stringify(json).slice(0, 100)));
   const img_key = img.replace(/^.*\/(\w+)\.\w+$/, "$1");
   const sub_key = sub.replace(/^.*\/(\w+)\.\w+$/, "$1");
   return { img_key, sub_key };
@@ -59,24 +73,74 @@ async function getWbiKeys(): Promise<{ img_key: string; sub_key: string }> {
 async function getMixKey(): Promise<string> {
   if (wbiCache && Date.now() < wbiCache.expires_at) return wbiCache.mix_key;
   const { img_key, sub_key } = await getWbiKeys();
-  const mix = sub_key.substring(0, 4) + img_key.substring(0, 4);
+  const mix = getMixinKey(img_key, sub_key);
   wbiCache = { mix_key: mix, expires_at: Date.now() + 3600_000 }; // 1h 缓存
   return mix;
 }
 
-async function md5(str: string): Promise<string> {
-  const buf = new TextEncoder().encode(str);
-  const hash = await crypto.subtle.digest("MD5", buf);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+// Deno Deploy 不再支持 crypto.subtle.digest("MD5")，自实现 MD5
+function md5Sync(input: string): string {
+  const msg = new TextEncoder().encode(input);
+  const s = (n: number, b: number) => (n << b) | (n >>> (32 - b));
+  const rotL = (n: number, b: number) => (n << b) | (n >>> (32 - b));
+  // padding
+  const bitLen = msg.length * 8;
+  const padded = new Uint8Array(((msg.length + 8) >> 6) * 64 + 64);
+  padded.set(msg);
+  padded[msg.length] = 0x80;
+  const dv = new DataView(padded.buffer);
+  dv.setUint32(padded.length - 8, Math.floor(bitLen / 0x100000000), true);
+  dv.setUint32(padded.length - 4, bitLen >>> 0, true);
+  // constants
+  const K = [
+    0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+    0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+    0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+    0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+    0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+    0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+    0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+    0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
+  ];
+  const S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  for (let off = 0; off < padded.length; off += 64) {
+    const M = new Array(16);
+    for (let i = 0; i < 16; i++) M[i] = dv.getUint32(off + i * 4, true);
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F: number, g: number;
+      if (i < 16) { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+      else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+      F = (F + A + K[i] + M[g]) >>> 0;
+      A = D; D = C; C = B;
+      B = (B + rotL(F, S[i])) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+  const toHex = (n: number) => {
+    let h = '';
+    for (let i = 0; i < 4; i++) h += ((n >>> (i * 8)) & 0xff).toString(16).padStart(2, '0');
+    return h;
+  };
+  return toHex(a0) + toHex(b0) + toHex(c0) + toHex(d0);
 }
+
+function md5(str: string): string { return md5Sync(str); }
 
 async function wbiSign(params: Record<string, string>): Promise<Record<string, string>> {
   const mix = await getMixKey();
   const ts = Math.floor(Date.now() / 1000);
-  const sorted = Object.keys(params).sort();
-  let query = sorted.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join("&");
-  query += `&wts=${ts}`;
-  const w_rid = await md5(query + mix);
+  const chr_filter = /[!'()*]/g;
+  const paramsWithWts = { ...params, wts: String(ts) };
+  const sorted = Object.keys(paramsWithWts).sort();
+  const query = sorted.map(k => {
+    const v = paramsWithWts[k].replace(chr_filter, "");
+    return `${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+  }).join("&");
+  const w_rid = md5(query + mix);
   return { ...params, wts: String(ts), w_rid };
 }
 
@@ -146,23 +210,56 @@ async function actionPlayurl(body: any): Promise<any> {
     cid = plJson.data[0].cid;
   }
 
-  // 构造 Wbi 签名参数
   const targetQn = qn || 80; // 默认 1080p
+  const commonParams = `bvid=${bvid}&cid=${cid}&qn=${targetQn}&fnval=4048&fourk=1`;
+  const playHeaders = {
+    ...biliHeaders(),
+    Referer: `https://www.bilibili.com/video/${bvid}`,
+  };
+
+  // 策略1: 旧版 /x/player/playurl 端点（无 wbi 签名，无登录场景下也返完整 DASH）
+  // 这是 PiliPalaX APK 匿名播放的核心端点
+  try {
+    const puRes = await fetch(`https://api.bilibili.com/x/player/playurl?${commonParams}`, { headers: playHeaders });
+    const puJson = await puRes.json();
+    if (puJson.code === 0 && puJson.data?.dash) {
+      const playData = puJson.data;
+      return {
+        success: true,
+        data: {
+          bvid,
+          cid: Number(cid),
+          quality: playData.quality,
+          accept_quality: playData.accept_quality || [],
+          accept_qn: playData.accept_qn || [],
+          video_duration: playData.dash?.duration || 0,
+          dash: playData.dash,
+          durl: playData.durl || null,
+          endpoint: 'playurl',
+        },
+      };
+    }
+  } catch (e) {
+    console.error('[playurl] fallback endpoint failed:', (e as Error).message);
+  }
+
+  // 策略2: wbi/v2 端点（需登录态拿完整 DASH，无登录时可能返 preview）
   const unsigned: Record<string, string> = {
     bvid, cid: String(cid),
     qn: String(targetQn),
-    fnval: "4048", // DASH+HDR+杜比+8K
+    fnval: "4048",
     fourk: "1",
   };
   const signed = await wbiSign(unsigned);
-
-  // 请求 playurl
   const query = Object.entries(signed).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-  const puRes = await fetch(`https://api.bilibili.com/x/player/wbi/v2?${query}`, { headers: biliHeaders() });
+  const puRes = await fetch(`https://api.bilibili.com/x/player/wbi/v2?${query}`, { headers: playHeaders });
   const puJson = await puRes.json();
   if (puJson.code !== 0) return { success: false, error: puJson.message || "playurl 接口返回错误" };
 
   const playData = puJson.data;
+  if (!playData.dash) {
+    return { success: false, error: "无登录态无法获取 DASH,且旧端点也失败: " + (playData.preview_toast || "no dash") };
+  }
   return {
     success: true,
     data: {
@@ -172,9 +269,9 @@ async function actionPlayurl(body: any): Promise<any> {
       accept_quality: playData.accept_quality || [],
       accept_qn: playData.accept_qn || [],
       video_duration: playData.dash?.duration || 0,
-      // 透传原始 DASH 完整数据（含 segment_base/mimeType/codecs 等）
-      dash: playData.dash || null,
+      dash: playData.dash,
       durl: playData.durl || null,
+      endpoint: 'wbi/v2',
     },
   };
 }
