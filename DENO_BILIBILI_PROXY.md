@@ -172,17 +172,8 @@ async function actionPlayurl(body: any): Promise<any> {
       accept_quality: playData.accept_quality || [],
       accept_qn: playData.accept_qn || [],
       video_duration: playData.dash?.duration || 0,
-      dash: playData.dash ? {
-        video: (playData.dash.video || []).map((v: any) => ({
-          id: v.id, base_url: v.base_url, backup_url: v.backup_url || [],
-          width: v.width, height: v.height, codecid: v.codecid, bandwidth: v.bandwidth,
-        })),
-        audio: (playData.dash.audio || []).map((a: any) => ({
-          id: a.id, base_url: a.base_url, backup_url: a.backup_url || [],
-          bandwidth: a.bandwidth, codecid: a.codecid,
-        })),
-      } : null,
-      // 如果 DASH 没有，尝试拿 mp4 直链
+      // 透传原始 DASH 完整数据（含 segment_base/mimeType/codecs 等）
+      dash: playData.dash || null,
       durl: playData.durl || null,
     },
   };

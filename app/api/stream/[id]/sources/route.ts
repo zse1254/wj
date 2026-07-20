@@ -33,14 +33,14 @@ function extractCdns(streamData: any): { name: string; label: string; index: num
   ]
 
   for (const s of allStreams) {
-    const urls = [s.base_url, ...(s.backup_url || [])]
+    const base = s.baseUrl || s.base_url || ''
+    const backups = s.backupUrl || s.backup_url || []
+    const urls = [base, ...backups].filter(Boolean)
     for (let i = 0; i < urls.length; i++) {
-      const u = urls[i]
-      if (!u) continue
-      const host = extractCdnKey(u)
+      const host = extractCdnKey(urls[i])
       if (!seen.has(host)) {
         seen.set(host, i)
-        result.push({ name: host, label: labelFromUrl(u), index: i })
+        result.push({ name: host, label: labelFromUrl(urls[i]), index: i })
       }
     }
   }
