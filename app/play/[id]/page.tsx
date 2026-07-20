@@ -49,21 +49,31 @@ export default function PlayPage() {
 
     // 方案2: DASH (需要 dash.js)
     if (article.bilibili_url) {
-      setStatus('加载播放器...')
-      try {
-        const dashjs = await import('dashjs')
-        const player = dashjs.MediaPlayer().create()
-        let mpdUrl = `/api/stream/${id}`
-        player.initialize(video, mpdUrl, true)
-        player.on('error', (e: any) => {
-          console.error('dashjs error:', e)
-          setStatus('DASH 播放失败，切换备用方案...')
-          fallbackToIframe(article.bilibili_url, video)
-        })
-        return
-      } catch (e: any) {
-        console.error('dashjs init error:', e)
-        setStatus('播放器初始化失败，切换备用方案...')
+      setStatus('获取 DASH 流...')
+      // 先尝试抓取 MPD，看是否正常
+      const mpdUrl = `/api/stream/${id}`
+      const mpdRes = await fetch(mpdUrl).catch(() => null)
+      if (!mpdRes || !mpdRes.ok) {
+        const errBody = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
+        console.error('MPD fetch failed:', mpdRes?.status, errBody)
+        setStatus(`MPD ${mpdRes?.status}: ${errBody.slice(0, 200)}`)
+        await new Promise(r => setTimeout(r, 1500))
+      } else {
+        setStatus('加载播放器...')
+        try {
+          const dashjs = await import('dashjs')
+          const player = dashjs.MediaPlayer().create()
+          player.initialize(video, mpdUrl, true)
+          player.on('error', (e: any) => {
+            console.error('dashjs error:', e)
+            setStatus('DASH 播放失败，切换备用方案...')
+            fallbackToIframe(article.bilibili_url, video)
+          })
+          return
+        } catch (e: any) {
+          console.error('dashjs init error:', e)
+          setStatus('播放器初始化失败，切换备用方案...')
+        }
       }
     }
 
