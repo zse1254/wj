@@ -352,9 +352,15 @@ export default function EditArticlePage() {
             )}
             {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
               <button type="button" onClick={async () => {
-                const res = await fetch(`/api/admin/articles/${params.id}/refresh-stream`, { method: 'POST' })
-                const data = await res.json()
-                alert(data.success ? '直链已刷新' : (data.error || '刷新失败'))
+                try {
+                  const res = await fetch(`/api/admin/articles/${params.id}/refresh-stream`, { method: 'POST' })
+                  const text = await res.text()
+                  let data: any = {}
+                  try { data = JSON.parse(text) } catch { data = { error: text || res.statusText } }
+                  alert(data.success ? '直链已刷新' : (data.error || '刷新失败'))
+                } catch (e: any) {
+                  alert('请求异常: ' + (e?.message || e))
+                }
               }}
                 className="text-sm text-blue-600 hover:underline px-2">
                 刷新直链
