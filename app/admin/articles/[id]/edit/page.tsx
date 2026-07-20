@@ -376,23 +376,25 @@ export default function EditArticlePage() {
         </div>
 
         {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm flex items-center gap-3">
-            <span className="text-green-700 font-medium shrink-0">直链链接</span>
-            <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
-              className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
-            <button type="button" onClick={() => {
-              const url = `${window.location.origin}/play/${params.id}`
-              navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
-            }}
-              className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs shrink-0">
-              复制
-            </button>
-          </div>
-          {refreshMsg && (
-            <div className="mt-2 p-2 bg-gray-100 border rounded text-xs font-mono break-all whitespace-pre-wrap">
-              {refreshMsg}
+          <>
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm flex items-center gap-3">
+              <span className="text-green-700 font-medium shrink-0">直链链接</span>
+              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
+                className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+              <button type="button" onClick={() => {
+                const url = `${window.location.origin}/play/${params.id}`
+                navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
+              }}
+                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs shrink-0">
+                复制
+              </button>
             </div>
-          )}
+            {refreshMsg && (
+              <div className="mt-2 p-2 bg-gray-100 border rounded text-xs font-mono break-all whitespace-pre-wrap">
+                {refreshMsg}
+              </div>
+            )}
+          </>
         )}
       </form>
       {seriesInfo && (
