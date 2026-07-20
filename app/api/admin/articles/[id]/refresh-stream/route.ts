@@ -44,12 +44,24 @@ export async function POST(
         const data = await res.json()
         if (!data.success) continue
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
+        const updateResult = await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
           JSON.stringify(data.data), expiresAt, id,
         ])
+        // 验证写入结果
+        const verify = await query('SELECT stream_data, stream_expires_at FROM articles WHERE id = ?', [id])
+        const hasData = !!(verify?.[0]?.stream_data)
+        if (!hasData) {
+          return Response.json({ success: false, error: '写入 D1 失败（0行受影响），数据库可能未配置正确', verify })
+        }
         success = true
         break
-      } catch {}
+      } catch (e: any) {
+        console.error('[refresh-stream] Deno proxy error:', e?.message)
+      }
+    }
+
+    if (!success) {
+      console.error('[refresh-stream] all proxies failed')
     }
 
     if (success) {
