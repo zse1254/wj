@@ -18,6 +18,7 @@ export default function EditArticlePage() {
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
+  const [refreshMsg, setRefreshMsg] = useState('')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -357,9 +358,9 @@ export default function EditArticlePage() {
                   const text = await res.text()
                   let data: any = {}
                   try { data = JSON.parse(text) } catch { data = { error: text || res.statusText } }
-                  alert(data.success ? '直链已刷新' : (data.error || '刷新失败'))
+                  setRefreshMsg(data.success ? '✅ 直链已刷新' : ('❌ ' + (data.error || '刷新失败')))
                 } catch (e: any) {
-                  alert('请求异常: ' + (e?.message || e))
+                  setRefreshMsg('❌ 请求异常: ' + (e?.message || e))
                 }
               }}
                 className="text-sm text-blue-600 hover:underline px-2">
@@ -387,6 +388,11 @@ export default function EditArticlePage() {
               复制
             </button>
           </div>
+          {refreshMsg && (
+            <div className="mt-2 p-2 bg-gray-100 border rounded text-xs font-mono break-all whitespace-pre-wrap">
+              {refreshMsg}
+            </div>
+          )}
         )}
       </form>
       {seriesInfo && (
