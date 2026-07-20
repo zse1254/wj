@@ -92,6 +92,7 @@ export async function GET(
     }
 
     const streamData = JSON.parse(article.stream_data)
+    console.error('[stream] streamData keys:', Object.keys(streamData), 'has dash:', !!streamData.dash)
     const mpd = buildMpd(streamData, cdnIndex)
 
     return new Response(mpd, {
@@ -103,6 +104,7 @@ export async function GET(
       },
     })
   } catch (err: any) {
-    return new Response(err.message || 'Server error', { status: 500, headers: { 'Content-Type': 'text/plain' } })
+    console.error('[stream] error:', err)
+    return new Response(JSON.stringify({ error: err.message, stack: err.stack }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 }
