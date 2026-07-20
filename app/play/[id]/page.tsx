@@ -3,22 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 
-interface CdnSource {
-  name: string
-  label: string
-  index: number
-}
-
 export default function PlayPage() {
   const params = useParams()
   const videoRef = useRef<HTMLVideoElement>(null)
-  const playerRef = useRef<any>(null)
   const [error, setError] = useState('')
-  const [loaded, setLoaded] = useState(false)
-  const [cdns, setCdns] = useState<CdnSource[]>([])
+  const [status, setStatus] = useState('加载中...')
+  const [cdns, setCdns] = useState<{ label: string; index: number }[]>([])
   const [currentCdn, setCurrentCdn] = useState(0)
-  const [qualities, setQualities] = useState<{ id: number; label: string }[]>([])
-  const [currentQuality, setCurrentQuality] = useState(-1)
+  const [usingIframe, setUsingIframe] = useState(false)
 
   useEffect(() => {
     document.title = 'Video Player'
@@ -28,123 +20,73 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
-  useEffect(() => {
-    if (loaded) return
-    setLoaded(true)
-    loadCdns()
-    load()
-    return () => {
-      if (playerRef.current) {
-        try { playerRef.current.reset() } catch {}
-        playerRef.current = null
-      }
-    }
-  }, [params.id, loaded])
-
-  async function loadCdns() {
-    try {
-      const res = await fetch(`/api/stream/${params.id}/sources`)
-      const json = await res.json()
-      if (json.success && json.cdns?.length > 0) {
-        setCdns(json.cdns)
-      }
-    } catch {}
-  }
-
-  function getMpdUrl(cdnIndex?: number) {
-    const cdn = cdnIndex ?? currentCdn
-    let url = `/api/stream/${params.id}`
-    if (cdn > 0) url += `?cdn=${cdn}`
-    return url
-  }
-
-  function initPlayer(quality?: number) {
-    const video = videoRef.current
-    if (!video) return
-
-    if (playerRef.current) {
-      try { playerRef.current.reset() } catch {}
-      playerRef.current = null
-    }
-
-    const q = quality ?? currentQuality
-    let url = getMpdUrl()
-    if (q > 0) url += (url.includes('?') ? '&' : '?') + `quality=${q}`
-
-    try {
-      import('dashjs').then((dashjs) => {
-        const player = dashjs.MediaPlayer().create()
-        playerRef.current = player
-        if (q > 0) {
-          player.updateSettings({ streaming: { abr: { autoSwitchBitrate: { video: false, audio: false } } } })
-        }
-        player.initialize(video, url, true)
-        player.on('error', () => {})
-        player.on('qualityChange', (e: any) => {
-          if (e.mediaType === 'video') setCurrentQuality(e.newQuality)
-        })
-        player.on('streamInitialized', () => {
-          const tracks = player.getTracksFor('video')
-          if (tracks?.length) {
-            setQualities(tracks.map((t: any, i: number) => ({
-              id: i,
-              label: `${t.height || t.bandwidth}p`,
-            })))
-          }
-        })
-      })
-    } catch {}
-  }
-
-  function switchCdn(cdnIndex: number) {
-    setCurrentCdn(cdnIndex)
-    setTimeout(() => initPlayer(currentQuality), 50)
-  }
-
-  function switchQuality(qualityIndex: number) {
-    setCurrentQuality(qualityIndex)
-    if (playerRef.current) {
-      playerRef.current.setQualityFor('video', qualityIndex, false)
-    }
-  }
+  useEffect(() => { load() }, [params.id])
 
   async function load() {
     const id = params.id as string
-    const video = videoRef.current
-    if (!video) return
+    setStatus('加载视频信息...')
 
+    // 获取文章信息
     const res = await fetch(`/api/articles/${id}`)
     const json = await res.json()
     if (!json.success || !json.data) { setError('视频不存在'); return }
     const article = json.data
 
+    // 获取 CDN 信息
+    fetch(`/api/stream/${id}/sources`).then(r => r.json()).then(j => {
+      if (j.success && j.cdns?.length > 1) setCdns(j.cdns)
+    }).catch(() => {})
+
+    const video = videoRef.current
+    if (!video) return
+
+    // 方案1: 直链视频 (MP4 / HLS)
     if (article.video_url) {
       video.src = article.video_url
-      video.play().catch(() => {})
+      await video.play().catch(() => setError('无法播放直链视频'))
       return
     }
 
+    // 方案2: DASH (需要 dash.js)
     if (article.bilibili_url) {
-      initPlayer()
-      return
-    }
-
-    const bvid = article.bilibili_url?.match(/BV[a-zA-Z0-9]+/)?.[0]
-    if (bvid) {
-      const container = video.parentElement
-      if (container) {
-        video.style.display = 'none'
-        const iframe = document.createElement('iframe')
-        iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
-        iframe.setAttribute('referrerPolicy', 'no-referrer')
-        iframe.setAttribute('allowFullScreen', '')
-        container.appendChild(iframe)
+      setStatus('加载播放器...')
+      try {
+        const dashjs = await import('dashjs')
+        const player = dashjs.MediaPlayer().create()
+        let mpdUrl = `/api/stream/${id}`
+        player.initialize(video, mpdUrl, true)
+        player.on('error', (e: any) => {
+          console.error('dashjs error:', e)
+          setStatus('DASH 播放失败，切换备用方案...')
+          fallbackToIframe(article.bilibili_url, video)
+        })
+        return
+      } catch (e: any) {
+        console.error('dashjs init error:', e)
+        setStatus('播放器初始化失败，切换备用方案...')
       }
-      return
     }
 
-    setError('无法播放此视频')
+    // 方案3: B站 iframe 兜底
+    await fallbackToIframe(article.bilibili_url, video)
+  }
+
+  async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
+    const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
+    if (!bvid) { setError('无法播放此视频'); return }
+
+    setUsingIframe(true)
+    setStatus('')
+    const container = video.parentElement
+    if (!container) return
+
+    video.style.display = 'none'
+    const iframe = document.createElement('iframe')
+    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
+    iframe.setAttribute('referrerPolicy', 'no-referrer')
+    iframe.setAttribute('allowFullScreen', '')
+    container.appendChild(iframe)
   }
 
   return (
@@ -154,15 +96,19 @@ export default function PlayPage() {
         controls
         autoPlay
         playsInline
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
-      {cdns.length > 1 && (
+      {!usingIframe && cdns.length > 1 && (
         <div style={{
           position: 'absolute', top: 12, right: 12, zIndex: 10,
-          display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end',
+          display: 'flex', gap: 4,
         }}>
           {cdns.map((cdn) => (
-            <button key={cdn.index} onClick={() => switchCdn(cdn.index)}
+            <button key={cdn.index} onClick={() => {
+              setCurrentCdn(cdn.index)
+              setStatus('切换 CDN，重新加载...')
+              setTimeout(() => { setStatus(''); window.location.reload() }, 100)
+            }}
               style={{
                 padding: '3px 8px', fontSize: 11, fontFamily: 'sans-serif',
                 background: cdn.index === currentCdn ? 'rgba(0,140,255,.85)' : 'rgba(0,0,0,.6)',
@@ -173,29 +119,12 @@ export default function PlayPage() {
           ))}
         </div>
       )}
-      {qualities.length > 1 && (
-        <div style={{
-          position: 'absolute', top: 12, left: 12, zIndex: 10,
-          display: 'flex', gap: 4,
-        }}>
-          {qualities.map((q) => (
-            <button key={q.id} onClick={() => switchQuality(q.id)}
-              style={{
-                padding: '3px 8px', fontSize: 11, fontFamily: 'sans-serif',
-                background: q.id === currentQuality ? 'rgba(0,140,255,.85)' : 'rgba(0,0,0,.6)',
-                color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
-              }}>
-              {q.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {error && (
+      {(status || error) && (
         <div style={{
           position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
           color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)',
           padding: '8px 16px', borderRadius: 8,
-        }}>{error}</div>
+        }}>{error || status}</div>
       )}
     </div>
   )
