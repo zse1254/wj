@@ -64,7 +64,23 @@ export async function POST(
           errors.push(`${proxyUrl}: ${data.error || 'unknown'}`)
           continue
         }
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        // B站 给的 base_url 含 deadline query,实际有效期约 1 小时
+        // 从第一个 video base_url 抽出 deadline,留 5 分钟冗余
+        let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()  // 默认 50 分钟
+        try {
+          const firstV = data.data?.dash?.video?.[0]
+          const bu = firstV?.base_url || firstV?.baseUrl || ''
+          if (bu) {
+            const dl = new URL(bu).searchParams.get('deadline')
+            if (dl) {
+              const dlMs = Number(dl) * 1000
+              if (dlMs > Date.now()) {
+                // 留 5 分钟冗余
+                expiresAt = new Date(dlMs - 5 * 60 * 1000).toISOString()
+              }
+            }
+          }
+        } catch {}
         await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
           JSON.stringify(data.data), expiresAt, id,
         ])
