@@ -21,7 +21,6 @@ export default function PlayPage() {
   const [currentAudio, setCurrentAudio] = useState<string>('all')
   const [menuOpen, setMenuOpen] = useState<'' | 'cdn' | 'qn' | 'audio'>('')
   const [usingIframe, setUsingIframe] = useState(false)
-  const cdnRetryRef = useRef(0)
   const cdnsRef = useRef<Cdn[]>([])
 
   useEffect(() => {
@@ -118,8 +117,12 @@ export default function PlayPage() {
               setStatus(`尝试 CDN: ${cdn.label}`)
               try {
                 const retryMpd = `/api/stream/${params.id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(currentQn)}&audio=${encodeURIComponent(currentAudio)}&_=${Date.now()}`
+                // player 可能处于 broken state，reset 后 attachSource
+                player.reset()
+                const rv = document.querySelector('video')
+                if (rv) player.initialize(rv as HTMLVideoElement, null, false)
                 await new Promise<void>((resolve, reject) => {
-                  const timeout = setTimeout(() => reject(new Error('timeout')), 3000)
+                  const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
                   player.attachSource(retryMpd)
                   const onOk = () => { clearTimeout(timeout); resolve() }
                   player.on('streamInitialized', onOk, { once: true })
@@ -190,33 +193,9 @@ export default function PlayPage() {
     }
   }
 
-  async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
-    // 先自动试所有 CDN：每个 CDN 拉一次 MPD，等 dash.js 出结果（2s 超时）
-    const allCdns = cdnsRef.current
-    for (const cdn of allCdns) {
-      if (cdn.key === currentCdn) continue // 跳过正在用的
-      cdnRetryRef.current++
-      setStatus(`尝试 CDN: ${cdn.label}`)
-      const cdnUrl = `/api/stream/${params.id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(currentQn)}&audio=${encodeURIComponent(currentAudio)}&_=retry${cdnRetryRef.current}`
-      try {
-        const player = playerRef.current
-        if (player) {
-          player.attachSource(cdnUrl)
-          // 等 2 秒，如果有错误说明这个 CDN 也挂了
-          await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('timeout')), 2500)
-            const onErr = () => { clearTimeout(timeout); reject(new Error('cdn fail')) }
-            player.on('error', onErr, { once: true })
-            player.on('streamInitialized', () => { clearTimeout(timeout); resolve() }, { once: true })
-            player.on('canPlay', () => { clearTimeout(timeout); resolve() }, { once: true })
-          })
-          localStorage.setItem(`cdn-${params.id}`, cdn.key)
-          setCurrentCdn(cdn.key)
-          setStatus('')
-          return
-        }
-      } catch { continue }
-    }
+async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
+    // 换 CDN 失败后才走这
+
     const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
     if (!bvid) { setError('无法播放此视频'); return }
 
