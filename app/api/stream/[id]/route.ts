@@ -66,10 +66,10 @@ function buildMpd(data: any, articleId: string, cdnParam: string, qnParam?: stri
     }
   }
 
-  // 把 B站 CDN 直链包装成走我们自己的代理 /api/stream/{id}/proxy?u=<原 URL>
+  // 把 B站 CDN 直链包装成走 Deno Deploy 代理
   // 原因: B站 CDN 校验 Referer, 浏览器跨域发请求时 Referer 是 wj.hvhh.cn 会被拒 403
-  // 代理服务器加固定 Referer: https://www.bilibili.com 即可绕过
-  const proxyBase = `/api/stream/${encodeURIComponent(articleId)}/proxy?u=`
+  // Deno Deploy 代理加固定 Referer: https://www.bilibili.com 即可绕过
+  const proxyBase = `https://rustic-mayfly-8854.zse1254.deno.net/proxy?u=`
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
