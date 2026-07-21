@@ -120,7 +120,7 @@ export default function PlayPage() {
                 // player 可能处于 broken state，reset 后 attachSource
                 player.reset()
                 const rv = document.querySelector('video')
-                if (rv) player.initialize(rv as HTMLVideoElement, null, false)
+                if (rv) { player.attachView(rv as HTMLVideoElement); player.attachSource(retryMpd) } else { player.initialize(videoRef.current!, retryMpd, false) }
                 await new Promise<void>((resolve, reject) => {
                   const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
                   player.attachSource(retryMpd)

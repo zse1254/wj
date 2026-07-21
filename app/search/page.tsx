@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 
-interface Result { bvid: string; title: string; author: string; duration: string; cover_url: string; play: number }
+interface Result { bvid: string; title: string; author: string; duration: number; cover_url: string; play: number }
 
 export default function SearchPage() {
   const [q, setQ] = useState('')
