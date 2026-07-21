@@ -58,6 +58,7 @@ apk_extract/
 
 # Deno proxy deploy script (just for copying to Deno Deploy Playground)
 deno_proxy_deploy.ts
+deno_proxy_deploy.txt
 
 # Local notes for user
 UPGRADE_NOTES_20260721.md
