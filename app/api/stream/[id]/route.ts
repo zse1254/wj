@@ -42,7 +42,7 @@ function getSegmentBase(stream: any): { init: string; index: string } {
   return { init: '0-131072', index: '0-131072' }
 }
 
-function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string): string {
+function buildMpd(data: any, articleId: string, cdnParam: string, qnParam?: string, audioParam?: string): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
   let streams = data.dash?.video || []
@@ -66,15 +66,21 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
+  // 把 B站 CDN 直链包装成走我们自己的代理 /api/stream/{id}/proxy?u=<原 URL>
+  // 原因: B站 CDN 校验 Referer, 浏览器跨域发请求时 Referer 是 wj.hvhh.cn 会被拒 403
+  // 代理服务器加固定 Referer: https://www.bilibili.com 即可绕过
+  const proxyBase = `/api/stream/${encodeURIComponent(articleId)}/proxy?u=`
+
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
     const codecs = v.codecs || 'avc1.64001F'
     const w = v.width || 1920
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
+    const proxiedUrl = proxyBase + encodeURIComponent(getUrl(v, cdnParam))
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(getUrl(v, cdnParam))}</BaseURL>
+      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -85,9 +91,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const sb = getSegmentBase(a)
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
+    const proxiedUrl = proxyBase + encodeURIComponent(getUrl(a, cdnParam))
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(getUrl(a, cdnParam))}</BaseURL>
+      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -146,7 +153,7 @@ export async function GET(
     }
 
     const streamData = JSON.parse(article.stream_data)
-    const mpd = buildMpd(streamData, cdnParam, qnParam, audioParam)
+    const mpd = buildMpd(streamData, id, cdnParam, qnParam, audioParam)
 
     return new Response(mpd, {
       status: 200,
