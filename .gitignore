@@ -55,3 +55,9 @@ next-env.d.ts
 # APK analysis (too large, not needed for deployment)
 *.apk
 apk_extract/
+
+# Deno proxy deploy script (just for copying to Deno Deploy Playground)
+deno_proxy_deploy.ts
+
+# Local notes for user
+UPGRADE_NOTES_20260721.md
