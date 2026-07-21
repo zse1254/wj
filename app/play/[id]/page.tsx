@@ -98,7 +98,12 @@ export default function PlayPage() {
         const dashjs = await import('dashjs')
         const player = dashjs.MediaPlayer().create()
         playerRef.current = player
-        player.updateSettings({ streaming: { abr: { autoSwitchBitrate: { video: false, audio: false } } } })
+        player.updateSettings({
+          streaming: {
+            abr: { autoSwitchBitrate: { video: false, audio: false } },
+            cmcd: { enabled: false },
+          },
+        })
         player.initialize(video, mpdUrl, true)
         player.on('error', (e: any) => {
           console.error('dashjs error:', e)

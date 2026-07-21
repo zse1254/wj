@@ -74,7 +74,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const bw = v.bandwidth || v.bandWidth || 1000000
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL><![CDATA[${getUrl(v, cdnParam)}]]></BaseURL>
+      <BaseURL>${escapeXml(getUrl(v, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -87,7 +87,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const bw = a.bandwidth || a.bandWidth || 128000
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL><![CDATA[${getUrl(a, cdnParam)}]]></BaseURL>
+      <BaseURL>${escapeXml(getUrl(a, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
