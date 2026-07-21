@@ -21,6 +21,8 @@ export default function PlayPage() {
   const [currentAudio, setCurrentAudio] = useState<string>('all')
   const [menuOpen, setMenuOpen] = useState<'' | 'cdn' | 'qn' | 'audio'>('')
   const [usingIframe, setUsingIframe] = useState(false)
+  const cdnRetryRef = useRef(0)
+  const cdnsRef = useRef<Cdn[]>([])
 
   useEffect(() => {
     document.title = 'Video Player'
@@ -45,6 +47,7 @@ export default function PlayPage() {
       if (!j.success) return
       if (j.cdns?.length) {
         setCdns(j.cdns)
+        cdnsRef.current = j.cdns
         const saved = localStorage.getItem(`cdn-${id}`)
         if (saved && j.cdns.find((c: Cdn) => c.key === saved)) setCurrentCdn(saved)
       }
@@ -105,8 +108,31 @@ export default function PlayPage() {
           },
         })
         player.initialize(video, mpdUrl, true)
-        player.on('error', (e: any) => {
+        player.on('error', async (e: any) => {
           console.error('dashjs error:', e)
+          // 自动试其他 CDN
+          const allCdns = cdnsRef.current
+          if (allCdns.length > 1) {
+            for (const cdn of allCdns) {
+              if (cdn.key === currentCdn) continue
+              setStatus(`尝试 CDN: ${cdn.label}`)
+              try {
+                const retryMpd = `/api/stream/${params.id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(currentQn)}&audio=${encodeURIComponent(currentAudio)}&_=${Date.now()}`
+                await new Promise<void>((resolve, reject) => {
+                  const timeout = setTimeout(() => reject(new Error('timeout')), 3000)
+                  player.attachSource(retryMpd)
+                  const onOk = () => { clearTimeout(timeout); resolve() }
+                  player.on('streamInitialized', onOk, { once: true })
+                  player.on('canPlay', onOk, { once: true })
+                  player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
+                })
+                localStorage.setItem(`cdn-${params.id}`, cdn.key)
+                setCurrentCdn(cdn.key)
+                setStatus('')
+                return
+              } catch { continue }
+            }
+          }
           setStatus('DASH 播放失败，切换备用方案...')
           fallbackToIframe(article.bilibili_url, video)
         })
@@ -165,6 +191,32 @@ export default function PlayPage() {
   }
 
   async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
+    // 先自动试所有 CDN：每个 CDN 拉一次 MPD，等 dash.js 出结果（2s 超时）
+    const allCdns = cdnsRef.current
+    for (const cdn of allCdns) {
+      if (cdn.key === currentCdn) continue // 跳过正在用的
+      cdnRetryRef.current++
+      setStatus(`尝试 CDN: ${cdn.label}`)
+      const cdnUrl = `/api/stream/${params.id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(currentQn)}&audio=${encodeURIComponent(currentAudio)}&_=retry${cdnRetryRef.current}`
+      try {
+        const player = playerRef.current
+        if (player) {
+          player.attachSource(cdnUrl)
+          // 等 2 秒，如果有错误说明这个 CDN 也挂了
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('timeout')), 2500)
+            const onErr = () => { clearTimeout(timeout); reject(new Error('cdn fail')) }
+            player.on('error', onErr, { once: true })
+            player.on('streamInitialized', () => { clearTimeout(timeout); resolve() }, { once: true })
+            player.on('canPlay', () => { clearTimeout(timeout); resolve() }, { once: true })
+          })
+          localStorage.setItem(`cdn-${params.id}`, cdn.key)
+          setCurrentCdn(cdn.key)
+          setStatus('')
+          return
+        }
+      } catch { continue }
+    }
     const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
     if (!bvid) { setError('无法播放此视频'); return }
 

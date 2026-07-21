@@ -49,7 +49,7 @@ export async function POST(
           fetch(proxyUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'playurl', bvid }),
+            body: JSON.stringify({ action: 'playurl', bvid, qn: 120 }),
           }),
           10000
         )
