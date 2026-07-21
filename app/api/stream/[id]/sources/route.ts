@@ -22,13 +22,35 @@ const CDN_HOSTS: { host: string; label: string }[] = [
   { host: 'upos-tf-all-hw.bilivideo.com',      label: 'TF-华为全节点' },
   { host: 'upos-hz-mirrorakam.akamaized.net',  label: 'Akamai' },
   { host: 'cn-hk-eq-bcache-01.bilivideo.com',  label: '香港节点' },
-]
+];
+
+// B站清晰度代码（源自 APK VideoQualityCode）
+const QN_LABELS: Record<number, string> = {
+  6: '240P 极速', 16: '360P 流畅', 32: '480P 清晰', 64: '720P 高清',
+  74: '720P60 高帧率', 80: '1080P 高清', 112: '1080P+ 高码率',
+  116: '1080P60 高帧率', 120: '4K 超清', 125: 'HDR 真彩',
+  126: '杜比视界', 127: '8K 超高清',
+};
+
+// B站音轨代码
+const AUDIO_LABELS: Record<number, string> = {
+  30216: '64K', 30232: '132K', 30280: '192K 高码率',
+  30250: '杜比全景声', 30251: '杜比', 30252: 'Hi-Res 无损',
+};
+
+// 视频编码
+const CODEC_LABELS: Record<string, string> = {
+  'avc1': 'H.264', 'hev1': 'H.265 (HEVC)', 'av01': 'AV1',
+};
+
+function codecLabel(codecs: string): string {
+  const m = codecs.match(/^[a-z0-9]+/i);
+  return m ? (CODEC_LABELS[m[0]] || m[0]) : codecs;
+}
 
 // 计算给定 baseURL 可替换的全部 CDN；返回 [{key,label}] 其中 key=index+1 留给 backup_url
 function extractCdns(streamData: any): { key: string; label: string; index: number }[] {
   const result: { key: string; label: string; index: number }[] = []
-  // base_url 用 index=0，随后是各 backup_url（index 1..N）
-  // 注意：所有 URL 的 host 我们都能替换为下面的 CDN 主机列表
   const first = streamData?.dash?.video?.[0] || streamData?.dash?.audio?.[0]
   if (!first) return result
   const base = first.baseUrl || first.base_url || ''
@@ -54,6 +76,31 @@ function extractCdns(streamData: any): { key: string; label: string; index: numb
   return result
 }
 
+// 提取可用清晰度列表（来自 dash.video 的不同 id）
+function extractQualities(streamData: any): { qn: number; label: string; count: number }[] {
+  const videos = streamData?.dash?.video || []
+  const map = new Map<number, number>()
+  for (const v of videos) {
+    const qn = v.id
+    map.set(qn, (map.get(qn) || 0) + 1)
+  }
+  const result: { qn: number; label: string; count: number }[] = []
+  for (const [qn, count] of Array.from(map.entries()).sort((a, b) => a[0] - b[0])) {
+    result.push({ qn, label: QN_LABELS[qn] || `QN${qn}`, count })
+  }
+  return result
+}
+
+// 提取可用音轨列表
+function extractAudios(streamData: any): { id: number; label: string; codecs: string }[] {
+  const audios = streamData?.dash?.audio || []
+  return audios.map((a: any) => ({
+    id: a.id,
+    label: AUDIO_LABELS[a.id] || `音轨${a.id}`,
+    codecs: a.codecs || '',
+  }))
+}
+
 export async function GET(
   _request: NextRequest,
   context: any
@@ -71,12 +118,14 @@ export async function GET(
     }
     const article = articles[0] as any
     if (!article.stream_data) {
-      return Response.json({ success: false, error: 'No stream data', cdns: [] })
+      return Response.json({ success: false, error: 'No stream data', cdns: [], qualities: [], audios: [] })
     }
     const streamData = JSON.parse(article.stream_data)
     const cdns = extractCdns(streamData)
-    return Response.json({ success: true, cdns })
+    const qualities = extractQualities(streamData)
+    const audios = extractAudios(streamData)
+    return Response.json({ success: true, cdns, qualities, audios })
   } catch (err: any) {
-    return Response.json({ success: false, error: err.message, cdns: [] }, { status: 500 })
+    return Response.json({ success: false, error: err.message, cdns: [], qualities: [], audios: [] }, { status: 500 })
   }
 }

@@ -81,7 +81,6 @@ async function getMixKey(): Promise<string> {
 // Deno Deploy 不再支持 crypto.subtle.digest("MD5")，自实现 MD5
 function md5Sync(input: string): string {
   const msg = new TextEncoder().encode(input);
-  const s = (n: number, b: number) => (n << b) | (n >>> (32 - b));
   const rotL = (n: number, b: number) => (n << b) | (n >>> (32 - b));
   // padding
   const bitLen = msg.length * 8;

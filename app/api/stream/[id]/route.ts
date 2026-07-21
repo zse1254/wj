@@ -42,11 +42,29 @@ function getSegmentBase(stream: any): { init: string; index: string } {
   return { init: '0-131072', index: '0-131072' }
 }
 
-function buildMpd(data: any, cdnParam: string): string {
+function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
-  const streams = data.dash?.video || []
-  const audioStreams = data.dash?.audio || []
+  let streams = data.dash?.video || []
+  let audioStreams = data.dash?.audio || []
+
+  // 按 qn 过滤视频流（多清晰度时只留指定的）
+  if (qnParam && qnParam !== 'all') {
+    const qn = parseInt(qnParam, 10)
+    if (!isNaN(qn)) {
+      const filtered = streams.filter((v: any) => v.id === qn)
+      if (filtered.length) streams = filtered
+    }
+  }
+
+  // 按 audio id 过滤音轨
+  if (audioParam && audioParam !== 'all') {
+    const aid = parseInt(audioParam, 10)
+    if (!isNaN(aid)) {
+      const filtered = audioStreams.filter((a: any) => a.id === aid)
+      if (filtered.length) audioStreams = filtered
+    }
+  }
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
@@ -55,7 +73,7 @@ function buildMpd(data: any, cdnParam: string): string {
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
     return `
-    <Representation id="v-${v.id || i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
+    <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
       <BaseURL>${escapeXml(getUrl(v, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
@@ -68,7 +86,7 @@ function buildMpd(data: any, cdnParam: string): string {
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
     return `
-    <Representation id="a-${a.id || i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
+    <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
       <BaseURL>${escapeXml(getUrl(a, cdnParam))}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
@@ -105,6 +123,8 @@ export async function GET(
   try {
     const { id } = await context.params
     const cdnParam = request.nextUrl.searchParams.get('cdn') || '0'
+    const qnParam = request.nextUrl.searchParams.get('qn') || 'all'
+    const audioParam = request.nextUrl.searchParams.get('audio') || 'all'
 
     let articles: any[] = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id]).catch(() => [])
     if (!articles.length) {
@@ -126,7 +146,7 @@ export async function GET(
     }
 
     const streamData = JSON.parse(article.stream_data)
-    const mpd = buildMpd(streamData, cdnParam)
+    const mpd = buildMpd(streamData, cdnParam, qnParam, audioParam)
 
     return new Response(mpd, {
       status: 200,
