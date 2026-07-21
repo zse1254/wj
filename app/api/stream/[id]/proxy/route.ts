@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const target = request.nextUrl.searchParams.get('u')
-    if (!target || !/^https:\/\/[\w.-]+\.bilivideo\.com\//.test(target)) {
+    if (!target || !/^https:\/\/[\w.-]+(\.bilivideo\.com|\.akamaized\.net)\//.test(target)) {
       return new Response('Bad target', { status: 400 })
     }
 
@@ -18,10 +18,13 @@ export async function GET(request: NextRequest) {
     const fwdHeaders = new Headers()
     const range = request.headers.get('range')
     if (range) fwdHeaders.set('range', range)
+    // Referer 是 B站 CDN 校验的关键, 必须 bilibili.com
     fwdHeaders.set('referer', 'https://www.bilibili.com')
-    fwdHeaders.set('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+    fwdHeaders.set('user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     fwdHeaders.set('accept', '*/*')
     fwdHeaders.set('accept-encoding', 'identity')
+    fwdHeaders.set('accept-language', 'zh-CN,zh;q=0.9,en;q=0.8')
+    fwdHeaders.set('origin', 'https://www.bilibili.com')
 
     const upstream = await fetch(target, {
       headers: fwdHeaders,
