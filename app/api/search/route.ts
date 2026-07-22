@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { DENO_PROXIES, fixVideoItems } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
       let data: any = {}
       try { data = JSON.parse(text) } catch { data = { error: text } }
       if (!res.ok || !data.success) continue
-      return Response.json({ success: true, data: data.data })
+      const fixed = { ...data.data, items: fixVideoItems(data.data.items || []) }
+      return Response.json({ success: true, data: fixed })
     } catch { continue }
   }
 

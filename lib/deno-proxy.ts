@@ -70,3 +70,21 @@ export async function fetchSeason(season_id?: number, mid?: number, series_id?: 
   const result = await callDenoProxy('season', { season_id, mid, series_id })
   return result.data
 }
+
+// 把 B站 接口返回的 cover_url 从 http:// 升级为 https://, 也处理 //domain/xxx 形式
+// 用于避免 https 站点上的 mixed content 拒绝
+export function fixCoverUrl(url: string): string {
+  if (!url) return ''
+  if (url.startsWith('//')) return 'https:' + url
+  if (url.startsWith('http://')) return 'https://' + url.slice(7)
+  return url
+}
+
+export function fixVideoItems(items: any[]): any[] {
+  if (!Array.isArray(items)) return []
+  return items.map((it: any) => ({
+    ...it,
+    cover_url: fixCoverUrl(it.cover_url || ''),
+    cover: fixCoverUrl(it.cover || it.cover_url || ''),
+  }))
+}

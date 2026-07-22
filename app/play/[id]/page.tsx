@@ -136,6 +136,8 @@ export default function PlayPage() {
           },
         })
         player.initialize(video, mpdUrl, true)
+        player.on('canPlay', () => { setStatus('') })
+        player.on('playbackPlaying', () => { setStatus('') })
         player.on('error', async (e: any) => {
           console.error('dashjs error:', e)
           // 自动试其他 CDN
@@ -235,6 +237,8 @@ export default function PlayPage() {
         },
       })
       player.initialize(video, mpdUrl, true)
+      player.on('canPlay', () => { setStatus('') })
+      player.on('playbackPlaying', () => { setStatus('') })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
         const allCdns = cdnsRef.current
