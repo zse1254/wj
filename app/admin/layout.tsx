@@ -15,6 +15,12 @@ const navItems = [
   { href: '/admin/reports', label: '举报处理', icon: '🚩' },
 ]
 
+const externalLinks = [
+  { href: '/app', label: '播放器主页', icon: '📺', desc: '自用播放器', highlight: true },
+  { href: '/recommend', label: '推荐页', icon: '✨', desc: 'B站推荐流' },
+  { href: '/search', label: '搜索页', icon: '🔍', desc: 'B站搜索' },
+]
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -64,6 +70,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             )
           })}
         </nav>
+        <div className="px-3 py-3 border-t border-gray-200">
+          <div className="text-[11px] uppercase tracking-wider text-gray-400 px-2 mb-2">播放器</div>
+          {externalLinks.map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              target="_blank"
+              className={`flex items-center gap-3 px-3 py-2 text-sm rounded-lg mb-1 transition-colors ${
+                item.highlight
+                  ? 'bg-pink-50 text-pink-600 font-medium hover:bg-pink-100'
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+              {item.desc && <span className="text-[10px] text-gray-400 ml-auto">{item.desc}</span>}
+            </Link>
+          ))}
+        </div>
         <div className="p-4 border-t border-gray-200">
           <Link href="/" className="text-sm text-gray-500 hover:text-[#1a73e8] flex items-center gap-2">
             <span>←</span> <span>返回网站</span>

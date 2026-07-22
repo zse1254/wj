@@ -42,6 +42,11 @@ export default function PlayPage() {
     const id = params.id as string
     setStatus('加载视频信息...')
 
+    // bvid 模式: 直接从 Deno 代理拉 playurl 生成临时 MPD, 不依赖 D1
+    if (/^BV[a-zA-Z0-9]+$/.test(id)) {
+      return loadByBvid(id)
+    }
+
     const res = await fetch(`/api/articles/${id}`)
     const json = await res.json()
     if (!json.success || !json.data) { setError('视频不存在'); return }
@@ -178,6 +183,97 @@ export default function PlayPage() {
     await fallbackToIframe(article.bilibili_url, video)
   }
 
+  async function loadByBvid(bvid: string) {
+    setStatus('获取视频信息...')
+    const infoRes = await fetch(`/api/bvid/${bvid}`).catch(() => null)
+    let info: { title?: string; cover_url?: string } = {}
+    if (infoRes?.ok) {
+      const ij = await infoRes.json().catch(() => ({}))
+      if (ij.success) info = ij.data
+    }
+    if (info.title) document.title = info.title
+
+    setStatus('获取 DASH 流...')
+    const qn = localStorage.getItem(`qn-${bvid}`) || 'all'
+    const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
+    const mpdUrl = `/api/mpd/${bvid}?qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}`
+
+    const mpdRes = await fetch(mpdUrl).catch(() => null)
+    if (!mpdRes || !mpdRes.ok) {
+      const errBody = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
+      console.error('MPD fetch failed:', mpdRes?.status, errBody)
+      setStatus(`MPD ${mpdRes?.status}: ${errBody.slice(0, 200)}`)
+      await new Promise(r => setTimeout(r, 1500))
+      await fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, videoRef.current!)
+      return
+    }
+
+    // 提取 sources 信息
+    fetch(`/api/mpd/${bvid}/sources`).then(r => r.json()).then(j => {
+      if (!j.success) return
+      if (j.cdns?.length) { setCdns(j.cdns); cdnsRef.current = j.cdns }
+      if (j.qualities?.length) {
+        setQualities(j.qualities)
+        const maxQn = j.qualities.reduce((a: Quality, b: Quality) => a.qn > b.qn ? a : b)
+        setCurrentQn(String(maxQn.qn))
+      }
+      if (j.audios?.length) setAudios(j.audios)
+    }).catch(() => {})
+
+    const video = videoRef.current
+    if (!video) return
+
+    setStatus('加载播放器...')
+    try {
+      const dashjs = await import('dashjs')
+      const player = dashjs.MediaPlayer().create()
+      playerRef.current = player
+      player.updateSettings({
+        streaming: {
+          abr: { autoSwitchBitrate: { video: false, audio: false } },
+          cmcd: { enabled: false },
+        },
+      })
+      player.initialize(video, mpdUrl, true)
+      player.on('error', async (e: any) => {
+        console.error('dashjs error:', e)
+        const allCdns = cdnsRef.current
+        if (allCdns.length > 1) {
+          const savedCdn = localStorage.getItem(`cdn-${bvid}`) || '0'
+          for (const cdn of allCdns) {
+            if (cdn.key === savedCdn) continue
+            setStatus(`尝试 CDN: ${cdn.label}`)
+            try {
+              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}&_=${Date.now()}`
+              player.reset()
+              const rv = videoRef.current
+              if (rv) player.attachView(rv)
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
+                const onOk = () => { clearTimeout(timeout); resolve() }
+                player.on('streamInitialized', onOk, { once: true })
+                player.on('canPlay', onOk, { once: true })
+                player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
+                player.attachSource(retryMpd)
+              })
+              localStorage.setItem(`cdn-${bvid}`, cdn.key)
+              setCurrentCdn(cdn.key)
+              setStatus('')
+              return
+            } catch { continue }
+          }
+        }
+        setStatus('DASH 播放失败，切换备用方案...')
+        fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, video)
+      })
+      return
+    } catch (e: any) {
+      console.error('dashjs init error:', e)
+      setStatus('播放器初始化失败，切换备用方案...')
+    }
+    await fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, video)
+  }
+
   function switchCdn(cdn: Cdn) {
     const id = params.id as string
     setMenuOpen('')
@@ -214,7 +310,8 @@ export default function PlayPage() {
       const cdn = localStorage.getItem(`cdn-${id}`) || '0'
       const qn = localStorage.getItem(`qn-${id}`) || 'all'
       const audio = localStorage.getItem(`audio-${id}`) || 'all'
-      const newMpd = `/api/stream/${id}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}&_=${Date.now()}`
+      const base = /^BV[a-zA-Z0-9]+$/.test(id) ? `/api/mpd/${id}` : `/api/stream/${id}`
+      const newMpd = `${base}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}&_=${Date.now()}`
       playerRef.current.attachSource(newMpd)
       setStatus('')
     } else {
