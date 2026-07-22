@@ -45,3 +45,28 @@ export async function fetchBilibiliInfo(url: string): Promise<any> {
   const result = await callDenoProxy('info', { url })
   return result.data
 }
+
+export async function fetchSearch(keyword: string): Promise<any> {
+  const result = await callDenoProxy('search', { keyword })
+  return result.data
+}
+
+export async function fetchRcmd(): Promise<any> {
+  const result = await callDenoProxy('rcmd', {})
+  return result.data
+}
+
+export async function fetchRanking(rid?: number): Promise<any> {
+  const result = await callDenoProxy('ranking', { rid })
+  return result.data
+}
+
+export async function fetchPopular(pn?: number): Promise<any> {
+  const result = await callDenoProxy('popular', { pn })
+  return result.data
+}
+
+export async function fetchSeason(season_id?: number, mid?: number, series_id?: number): Promise<any> {
+  const result = await callDenoProxy('season', { season_id, mid, series_id })
+  return result.data
+}

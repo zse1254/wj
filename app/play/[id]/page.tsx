@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 interface Cdn { key: string; label: string; index: number }
 interface Quality { qn: number; label: string; count: number }
 interface Audio { id: number; label: string; codecs: string }
+interface SeriesVid { title: string; bvid: string; page?: number }
 
 export default function PlayPage() {
   const params = useParams()
@@ -21,6 +22,10 @@ export default function PlayPage() {
   const [currentAudio, setCurrentAudio] = useState<string>('all')
   const [menuOpen, setMenuOpen] = useState<'' | 'cdn' | 'qn' | 'audio'>('')
   const [usingIframe, setUsingIframe] = useState(false)
+  const [seriesVids, setSeriesVids] = useState<SeriesVid[]>([])
+  const [seriesTitle, setSeriesTitle] = useState('')
+  const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
+  const [seriesOpen, setSeriesOpen] = useState(false)
   const cdnsRef = useRef<Cdn[]>([])
 
   useEffect(() => {
@@ -41,6 +46,25 @@ export default function PlayPage() {
     const json = await res.json()
     if (!json.success || !json.data) { setError('视频不存在'); return }
     const article = json.data
+
+    // 解析合集/系列数据
+    if (article.content) {
+      try {
+        const content = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
+        if (Array.isArray(content) && content.length > 0) {
+          const vids: SeriesVid[] = content.map((v: any) => ({
+            title: v.title || '', bvid: v.bvid || '',
+            page: v.page || 0,
+          })).filter((v: SeriesVid) => v.bvid)
+          if (vids.length > 1) {
+            setSeriesVids(vids)
+            setSeriesTitle(article.title || '合集')
+            const idx = vids.findIndex((v: SeriesVid) => v.bvid === (article.bilibili_url || '').match(/BV[a-zA-Z0-9]+/)?.[0])
+            setSeriesCurIdx(idx >= 0 ? idx : 0)
+          }
+        }
+      } catch {}
+    }
 
     fetch(`/api/stream/${id}/sources`).then(r => r.json()).then(j => {
       if (!j.success) return
@@ -112,24 +136,29 @@ export default function PlayPage() {
           // 自动试其他 CDN
           const allCdns = cdnsRef.current
           if (allCdns.length > 1) {
+            const id = params.id as string
+            const savedCdn = localStorage.getItem(`cdn-${id}`) || '0'
+            const savedQn = localStorage.getItem(`qn-${id}`) || 'all'
+            const savedAudio = localStorage.getItem(`audio-${id}`) || 'all'
             for (const cdn of allCdns) {
-              if (cdn.key === currentCdn) continue
+              if (cdn.key === savedCdn) continue
               setStatus(`尝试 CDN: ${cdn.label}`)
               try {
-                const retryMpd = `/api/stream/${params.id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(currentQn)}&audio=${encodeURIComponent(currentAudio)}&_=${Date.now()}`
-                // player 可能处于 broken state，reset 后 attachSource
+                const retryMpd = `/api/stream/${id}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(savedQn)}&audio=${encodeURIComponent(savedAudio)}&_=${Date.now()}`
                 player.reset()
-                const rv = document.querySelector('video')
-                if (rv) { player.attachView(rv as HTMLVideoElement); player.attachSource(retryMpd) } else { player.initialize(videoRef.current!, retryMpd, false) }
+                const rv = videoRef.current
+                if (rv) {
+                  player.attachView(rv)
+                }
                 await new Promise<void>((resolve, reject) => {
                   const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
-                  player.attachSource(retryMpd)
                   const onOk = () => { clearTimeout(timeout); resolve() }
                   player.on('streamInitialized', onOk, { once: true })
                   player.on('canPlay', onOk, { once: true })
                   player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
+                  player.attachSource(retryMpd)
                 })
-                localStorage.setItem(`cdn-${params.id}`, cdn.key)
+                localStorage.setItem(`cdn-${id}`, cdn.key)
                 setCurrentCdn(cdn.key)
                 setStatus('')
                 return
@@ -280,6 +309,49 @@ async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
       />
       {!usingIframe && (
         <div style={panelStyle}>
+          {seriesVids.length > 1 && (
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setSeriesOpen(o => !o)}
+                style={{ ...btnStyle, background: seriesOpen ? 'rgba(251,114,153,.3)' : 'rgba(0,0,0,.7)' }}
+              >剧集</button>
+              {seriesOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                  maxHeight: 360, overflowY: 'auto', minWidth: 240,
+                  background: 'rgba(20,20,20,.95)', border: '1px solid rgba(255,255,255,.2)',
+                  borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,.5)',
+                }}>
+                  <div style={{ padding: '8px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid rgba(255,255,255,.1)', fontFamily: 'sans-serif' }}>
+                    {seriesTitle} ({seriesVids.length}集)
+                  </div>
+                  {seriesVids.map((v, i) => (
+                    <a
+                      key={i}
+                      href={`/series/${params.id}`}
+                      style={{
+                        display: 'block', padding: '8px 12px', fontFamily: 'sans-serif', fontSize: 13,
+                        color: i === seriesCurIdx ? '#4fc3f7' : '#ccc', textDecoration: 'none',
+                        background: i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent',
+                        borderBottom: '1px solid rgba(255,255,255,.05)',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent')}
+                    >
+                      {i + 1}. {v.title || `第${i + 1}集`}
+                    </a>
+                  ))}
+                  <a
+                    href={`/series/${params.id}`}
+                    style={{
+                      display: 'block', padding: '8px 12px', fontFamily: 'sans-serif', fontSize: 12,
+                      color: '#fb7299', textDecoration: 'none', textAlign: 'center',
+                    }}
+                  >前往合集播放 →</a>
+                </div>
+              )}
+            </div>
+          )}
           <MenuHost
             label="CDN"
             current={currentCdn}
