@@ -1,26 +1,14 @@
 import { NextRequest } from 'next/server'
-import { DENO_PROXIES, fixVideoItems } from '@/lib/deno-proxy'
+import { fetchPopular } from '@/lib/bilibili'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const pn = request.nextUrl.searchParams.get('pn') || '1'
-  for (const proxyUrl of DENO_PROXIES) {
-    try {
-      const res = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'popular', pn: parseInt(pn, 10) }),
-        signal: AbortSignal.timeout(8000),
-      })
-      const text = await res.text()
-      let data: any = {}
-      try { data = JSON.parse(text) } catch { data = { error: text } }
-      if (!res.ok || !data.success) continue
-      const fixed = { ...data.data, items: fixVideoItems(data.data.items || []) }
-      return Response.json({ success: true, data: fixed })
-    } catch { continue }
+  const pn = parseInt(request.nextUrl.searchParams.get('pn') || '1', 10)
+  try {
+    const items = await fetchPopular(pn)
+    return Response.json({ success: true, data: { items } })
+  } catch (err: any) {
+    return Response.json({ success: false, error: '热门服务不可用: ' + (err.message || '未知错误') }, { status: 502 })
   }
-
-  return Response.json({ success: false, error: '热门服务不可用' }, { status: 502 })
 }

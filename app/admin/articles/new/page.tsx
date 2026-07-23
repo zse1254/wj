@@ -10,6 +10,7 @@ interface BilibiliVideo {
   cover_url: string
   page?: number
   duration?: number
+  cid?: number
 }
 
 export default function NewArticlePage() {
@@ -255,9 +256,38 @@ export default function NewArticlePage() {
     setBatchSaving(true)
     setBatchProgress(0)
     let count = 0
+    const createdIds: Record<string, string> = {}
+
+    const seriesBody: any = {
+      title: seriesInfo.title,
+      summary: '',
+      content: JSON.stringify(videos.map((v, i) => ({
+        title: v.title, bvid: v.bvid, page: v.page, cid: v.cid, cover_url: v.cover_url, duration: v.duration,
+        _idx: i, _id: '', // placeholder, filled after creation
+      }))),
+      type: 'series',
+      cover_image: videos[0]?.cover_url || '',
+      bilibili_url: videos[0]?.bvid ? `https://www.bilibili.com/video/${videos[0].bvid}` : '',
+      category_id: form.category_id,
+      published: form.published,
+      video_url: '', audio_url: '', is_m3u8: false,
+    }
+    let seriesArticleId = ''
+    try {
+      const seriesRes = await fetch('/api/admin/articles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(seriesBody),
+      })
+      if (seriesRes.ok) {
+        const sj = await seriesRes.json()
+        seriesArticleId = sj.data?.id || ''
+      }
+    } catch {}
+
     for (const v of videos) {
       try {
-        await fetch('/api/admin/articles', {
+        const res = await fetch('/api/admin/articles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -274,12 +304,38 @@ export default function NewArticlePage() {
             published: form.published,
           }),
         })
-        count++
+        if (res.ok) {
+          const j = await res.json()
+          if (j.data?.id) {
+            count++
+            createdIds[String(v.page || count)] = j.data.id
+          }
+        }
       } catch {}
       setBatchProgress(Math.round(((count) / videos.length) * 100))
     }
+
+    // 更新合集 article content，补上各分 P 的文章 UUID
+    if (seriesArticleId && Object.keys(createdIds).length > 0) {
+      try {
+        const updated = videos.map((v) => ({
+          title: v.title, bvid: v.bvid, page: v.page, cid: v.cid, cover_url: v.cover_url, duration: v.duration,
+          article_id: createdIds[String(v.page || 0)] || '',
+        }))
+        await fetch(`/api/admin/articles/${seriesArticleId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: JSON.stringify(updated),
+            bilibili_url: `https://www.bilibili.com/video/${videos[0].bvid}`,
+            cover_image: videos[0]?.cover_url || '',
+          }),
+        })
+      } catch {}
+    }
+
     setBatchSaving(false)
-    alert(`已成功添加 ${count} 个视频`)
+    alert(`已成功添加 ${count} 个视频${seriesArticleId ? ' + 合集索引' : ''}`)
     if (count > 0) router.push('/admin/articles')
   }
 

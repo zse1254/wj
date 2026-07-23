@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { fetchBilibiliPlayurl } from '@/lib/bilibili'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,19 +110,10 @@ export async function GET(
     }
 
     let data: any = null
-    for (const proxyUrl of DENO_PROXIES) {
-      try {
-        const res = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'playurl', bvid, cid, qn: 80 }),
-          signal: AbortSignal.timeout(10000),
-        })
-        const json = await res.json().catch(() => null)
-        if (!res.ok || !json?.success) continue
-        data = json.data
-        break
-      } catch { continue }
+    try {
+      data = await fetchBilibiliPlayurl(bvid, cid || undefined, 80)
+    } catch (err: any) {
+      console.error('[mpd/bvid/sources] playurl error:', err.message)
     }
     if (!data || !data.dash) {
       return Response.json({ success: false, error: '无法获取 stream 数据' }, { status: 502 })

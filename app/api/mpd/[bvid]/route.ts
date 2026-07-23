@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { fetchBilibiliPlayurl } from '@/lib/bilibili'
 
 export const dynamic = 'force-dynamic'
 
@@ -136,25 +136,16 @@ export async function GET(
       } catch {}
     }
 
-    // 从 Deno 代理拉取 playurl 临时数据 (默认请求 80=1080p, 实际能给的最高是 64=720p 匿名)
+    // 从 B站 直调 playurl (Wbi 签名)
     let data: any = null
-    for (const proxyUrl of DENO_PROXIES) {
-      try {
-        const res = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'playurl', bvid, cid, qn: 80 }),
-          signal: AbortSignal.timeout(10000),
-        })
-        const json = await res.json().catch(() => null)
-        if (!res.ok || !json?.success) continue
-        data = json.data
-        break
-      } catch { continue }
+    try {
+      data = await fetchBilibiliPlayurl(bvid, cid || undefined, 80)
+    } catch (err: any) {
+      console.error('[mpd/bvid] playurl error:', err.message)
     }
 
     if (!data || !data.dash) {
-      return new Response('Failed to fetch DASH stream from Deno proxy', { status: 502, headers: { 'Content-Type': 'text/plain' } })
+      return new Response('Failed to fetch DASH stream from Bilibili', { status: 502, headers: { 'Content-Type': 'text/plain' } })
     }
 
     const mpd = buildMpd(data, cdnParam, qnParam, audioParam)

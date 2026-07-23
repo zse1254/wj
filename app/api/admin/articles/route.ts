@@ -2,8 +2,7 @@ import { NextRequest } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid } from '@/lib/bilibili'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { extractBilibiliBvid, fetchBilibiliPlayurl } from '@/lib/bilibili'
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^\w\u4e00-\u9fff]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'post'
@@ -65,27 +64,15 @@ async function ensureColumns() {
 async function fetchAndStoreStream(articleId: string, bilibiliUrl: string) {
   const bvid = extractBilibiliBvid(bilibiliUrl)
   if (!bvid) return
-  const errors: string[] = []
-  for (const proxyUrl of DENO_PROXIES) {
-    try {
-      const res = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'playurl', bvid }),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!res.ok) { errors.push(`${proxyUrl}: ${res.status}`); continue }
-      const data = await res.json()
-      if (!data.success) { errors.push(`${proxyUrl}: ${data.error}`); continue }
+  try {
+    const data = await fetchBilibiliPlayurl(bvid, undefined, 80)
+    if (data.dash) {
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
-        JSON.stringify(data.data), expiresAt, articleId,
+        JSON.stringify(data), expiresAt, articleId,
       ])
-      return
-    } catch (err: any) {
-      errors.push(`${proxyUrl}: ${err.message}`)
     }
-  }
+  } catch {}
 }
 
 async function syncCategories(articleId: string, categoryIds: unknown) {

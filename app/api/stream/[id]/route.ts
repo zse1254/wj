@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid } from '@/lib/bilibili'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { extractBilibiliBvid, fetchBilibiliPlayurl } from '@/lib/bilibili'
 
 // 把 URL 的 host 替换为指定 CDN host
 function replaceHost(url: string, newHost: string): string {
@@ -150,11 +149,10 @@ export async function GET(
     let streamData: any = null
     let needRefresh = !article.stream_data || !article.stream_expires_at || new Date(article.stream_expires_at) < new Date()
 
-    // 失效/缺失 → 自动从 Deno 重拉 (最多1次, 避免死循环)
+    // 失效/缺失 → 自动从 B站 重拉 (直调 Playurl API, 最多1次)
     if (needRefresh) {
       const bvid = extractBilibiliBvid(article.bilibili_url || '')
       if (bvid) {
-        // 有 ?p= 参数时，尝试从 article.content 取对应 cid
         let playCid: number | undefined
         const pParsed = parseInt(pageParam, 10)
         if (pParsed && article.content) {
@@ -166,31 +164,21 @@ export async function GET(
             }
           } catch {}
         }
-        for (const proxyUrl of DENO_PROXIES) {
-          try {
-            const bodyPayload: { action: string; bvid: string; qn: number; cid?: number } = { action: 'playurl', bvid, qn: 80 }
-            if (playCid) bodyPayload.cid = playCid
-            const res = await fetch(proxyUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(bodyPayload),
-              signal: AbortSignal.timeout(10000),
-            })
-            const json = await res.json().catch(() => null)
-            if (!res.ok || !json?.success || !json.data?.dash) continue
+        try {
+          const playData = await fetchBilibiliPlayurl(bvid, playCid, 80)
+          if (playData.dash) {
             let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
             try {
-              const bu = json.data.dash.video?.[0]?.base_url || json.data.dash.video?.[0]?.baseUrl || ''
+              const bu = playData.dash.video?.[0]?.baseUrl || playData.dash.video?.[0]?.base_url || ''
               const dl = new URL(bu).searchParams.get('deadline')
               if (dl) { const dlMs = Number(dl) * 1000; if (dlMs > Date.now()) expiresAt = new Date(dlMs - 5 * 60 * 1000).toISOString() }
             } catch {}
             await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
-              JSON.stringify(json.data), expiresAt, id,
+              JSON.stringify(playData), expiresAt, id,
             ])
-            streamData = json.data
-            break
-          } catch {}
-        }
+            streamData = playData
+          }
+        } catch {}
       }
       if (!streamData) {
         return new Response('Stream data expired or unavailable, refresh failed', { status: 410, headers: { 'Content-Type': 'text/plain' } })

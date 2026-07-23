@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid } from '@/lib/bilibili'
-import { DENO_PROXIES } from '@/lib/deno-proxy'
+import { extractBilibiliBvid, fetchBilibiliPlayurl, fetchBilibiliVideoInfo } from '@/lib/bilibili'
 
 export async function POST(
   request: NextRequest,
@@ -34,60 +33,31 @@ export async function POST(
       if (pMatch) {
         const page = parseInt(pMatch[1], 10)
         try {
-          const cidRes = await fetch(`https://rustic-mayfly-8854.zse1254.deno.net`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'info', url: `https://www.bilibili.com/video/${bvid}` }),
-            signal: AbortSignal.timeout(8000),
-          }).catch(() => null)
-          if (cidRes?.ok) {
-            const cj = await cidRes.json().catch(() => null)
-            const pages = cj?.data?.series?.videos || []
-            const found = pages.find((v: { page: number; cid?: number }) => v.page === page)
-            if (found?.cid) cidToUse = Number(found.cid)
-          }
+          const infoData = await fetchBilibiliVideoInfo(bvid)
+          const found = infoData.pages.find((p) => p.page === page)
+          if (found?.cid) cidToUse = Number(found.cid)
         } catch {}
       }
     }
 
     let success = false
     const errors: string[] = []
-    for (const proxyUrl of DENO_PROXIES) {
-      try {
-        const payload: { action: string; bvid: string; qn: number; cid?: number } = { action: 'playurl', bvid, qn: 80 }
-        if (cidToUse) payload.cid = cidToUse
-        const res = await fetch(proxyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(10000),
-        })
-        const text = await res.text()
-        let data: any = {}
-        try { data = JSON.parse(text) } catch { data = { error: text } }
-        if (!res.ok || !data.success) { errors.push(`${proxyUrl}: ${data.error || `HTTP ${res.status}`}`); continue }
-
+    try {
+      const playData = await fetchBilibiliPlayurl(bvid, cidToUse || undefined, 80)
+      if (playData.dash) {
         let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
         try {
-          const firstV = data.data?.dash?.video?.[0]
-          const bu = firstV?.base_url || firstV?.baseUrl || ''
-          if (bu) {
-            const dl = new URL(bu).searchParams.get('deadline')
-            if (dl) {
-              const dlMs = Number(dl) * 1000
-              if (dlMs > Date.now()) expiresAt = new Date(dlMs - 5 * 60 * 1000).toISOString()
-            }
-          }
+          const bu = playData.dash.video?.[0]?.baseUrl || playData.dash.video?.[0]?.base_url || ''
+          const dl = new URL(bu).searchParams.get('deadline')
+          if (dl) { const dlMs = Number(dl) * 1000; if (dlMs > Date.now()) expiresAt = new Date(dlMs - 5 * 60 * 1000).toISOString() }
         } catch {}
-
         await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
-          JSON.stringify(data.data), expiresAt, id,
+          JSON.stringify(playData), expiresAt, id,
         ])
         success = true
-        break
-      } catch (e: any) {
-        errors.push(`${proxyUrl}: ${e?.message || e}`)
       }
+    } catch (e: any) {
+      errors.push(e?.message || e)
     }
 
     if (success) return Response.json({ success: true, message: '直链已刷新' })
