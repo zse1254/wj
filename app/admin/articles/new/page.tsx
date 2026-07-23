@@ -235,7 +235,7 @@ export default function NewArticlePage() {
       if (data.success) {
         const savedId = data.data?.id || ''
         setLastSavedId(savedId)
-        // 自动获取直链
+        // 自动获取直链（等待完成后才跳转）
         const bvid = extractBilibiliBvid(form.bilibili_url)
         if (bvid) {
           setFetchingLinks(true)
@@ -250,11 +250,7 @@ export default function NewArticlePage() {
           } catch {}
           setFetchingLinks(false)
         }
-        if (!form.published) {
-          setSaving(false)
-          return
-        }
-        router.push('/admin/articles')
+        // 不再自动跳转，让用户看到直链后手动操作
       } else {
         alert(data.error || '保存失败')
       }
@@ -489,10 +485,23 @@ export default function NewArticlePage() {
         </div>
       </form>
 
-      {lastSavedId && (directLinks || fetchingLinks) && (
+      {lastSavedId && (
         <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">
-          <h2 className="text-lg font-bold mb-3">直链</h2>
-          {fetchingLinks && !directLinks && <p className="text-sm text-gray-500">正在获取直链...</p>}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold">B站 CDN 直链</h2>
+            <div className="flex gap-2">
+              <a href={`/play/${lastSavedId}`} target="_blank"
+                className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">播放页</a>
+              <a href={`/admin/articles/${lastSavedId}/edit`} target="_blank"
+                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">编辑页</a>
+              <button type="button" onClick={() => router.push('/admin/articles')}
+                className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300">返回列表</button>
+            </div>
+          </div>
+          {fetchingLinks && !directLinks && <p className="text-sm text-gray-500">正在从 B站 获取 CDN 直链...</p>}
+          {!directLinks && !fetchingLinks && (
+            <p className="text-sm text-yellow-600">未获取到直链{!form.bilibili_url ? '（未填写 Bilibili 链接）' : ''}</p>
+          )}
           {directLinks && (
             <div className="space-y-3">
               <div>
@@ -519,7 +528,7 @@ export default function NewArticlePage() {
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-400">播放页: <a href={`/play/${lastSavedId}`} target="_blank" className="text-blue-500 hover:underline">{typeof window !== 'undefined' ? window.location.origin : ''}/play/{lastSavedId}</a></p>
+              <p className="text-xs text-gray-400">直链有时效性，过期需刷新。播放页: <a href={`/play/${lastSavedId}`} target="_blank" className="text-blue-500 hover:underline">{typeof window !== 'undefined' ? window.location.origin : ''}/play/{lastSavedId}</a></p>
             </div>
           )}
         </div>
