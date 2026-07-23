@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation'
 interface Cdn { key: string; label: string; index: number }
 interface Quality { qn: number; label: string; count: number }
 interface Audio { id: number; label: string; codecs: string }
-interface SeriesVid { title: string; bvid: string; page?: number }
+interface SeriesVid { title: string; bvid: string; page?: number; cover_url?: string; duration?: number }
 
 export default function PlayPage() {
   const params = useParams()
@@ -26,7 +26,11 @@ export default function PlayPage() {
   const [seriesTitle, setSeriesTitle] = useState('')
   const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
   const [seriesOpen, setSeriesOpen] = useState(false)
+  const [autoplayNext, setAutoplayNext] = useState(true)
   const cdnsRef = useRef<Cdn[]>([])
+  const errCountRef = useRef(0)
+  const activeBvidRef = useRef('')  // 当前实际播放的 bvid (合集模式下与 params.id 不同)
+  const MAX_ERR = 2
 
   useEffect(() => {
     document.title = 'Video Player'
@@ -38,13 +42,20 @@ export default function PlayPage() {
 
   useEffect(() => { load() }, [params.id])
 
+  function getCurrentPage(): number {
+    if (typeof window === 'undefined') return 0
+    const u = new URL(window.location.href)
+    const p = parseInt(u.searchParams.get('p') || '0', 10)
+    return p > 0 ? p : 0
+  }
+
   async function load() {
     const id = params.id as string
     setStatus('加载视频信息...')
 
     // bvid 模式: 直接从 Deno 代理拉 playurl 生成临时 MPD, 不依赖 D1
     if (/^BV[a-zA-Z0-9]+$/.test(id)) {
-      return loadByBvid(id)
+      return loadByBvid(id, getCurrentPage())
     }
 
     const res = await fetch(`/api/articles/${id}`)
@@ -53,19 +64,27 @@ export default function PlayPage() {
     const article = json.data
 
     // 解析合集/系列数据
+    let detectedSeries = false
     if (article.content) {
       try {
         const content = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
         if (Array.isArray(content) && content.length > 0) {
-          const vids: SeriesVid[] = content.map((v: any) => ({
+          const vids: SeriesVid[] = content.map((v: { title?: string; bvid?: string; page?: number; cover_url?: string; first_frame?: string; duration?: number }) => ({
             title: v.title || '', bvid: v.bvid || '',
             page: v.page || 0,
+            cover_url: v.cover_url || v.first_frame || '',
+            duration: v.duration || 0,
           })).filter((v: SeriesVid) => v.bvid)
           if (vids.length > 1) {
             setSeriesVids(vids)
             setSeriesTitle(article.title || '合集')
-            const idx = vids.findIndex((v: SeriesVid) => v.bvid === (article.bilibili_url || '').match(/BV[a-zA-Z0-9]+/)?.[0])
+            const reqPage = getCurrentPage()
+            const idx = reqPage ? vids.findIndex((v: SeriesVid) => v.page === reqPage) : -1
             setSeriesCurIdx(idx >= 0 ? idx : 0)
+            detectedSeries = true
+            // 合集走 bvid+cid 模式, 每次实时从 Deno 拉对应分 P 的 playurl
+            const bvid = vids[idx >= 0 ? idx : 0]?.bvid
+            if (bvid) return loadByBvid(bvid, reqPage || 1)
           }
         }
       } catch {}
@@ -81,7 +100,6 @@ export default function PlayPage() {
       }
       if (j.qualities?.length) {
         setQualities(j.qualities)
-        // 选最高清晰度作为初始（APK 风格）
         const maxQn = j.qualities.reduce((a: Quality, b: Quality) => a.qn > b.qn ? a : b)
         const savedQn = localStorage.getItem(`qn-${id}`)
         if (savedQn && j.qualities.find((q: Quality) => String(q.qn) === savedQn)) {
@@ -140,6 +158,12 @@ export default function PlayPage() {
         player.on('playbackPlaying', () => { setStatus('') })
         player.on('error', async (e: any) => {
           console.error('dashjs error:', e)
+          errCountRef.current++
+          if (errCountRef.current > MAX_ERR) {
+            setStatus('多次播放失败，切换备用方案...')
+            fallbackToIframe(article.bilibili_url, video)
+            return
+          }
           // 自动试其他 CDN
           const allCdns = cdnsRef.current
           if (allCdns.length > 1) {
@@ -167,6 +191,7 @@ export default function PlayPage() {
                 })
                 localStorage.setItem(`cdn-${id}`, cdn.key)
                 setCurrentCdn(cdn.key)
+                errCountRef.current = 0
                 setStatus('')
                 return
               } catch { continue }
@@ -174,6 +199,15 @@ export default function PlayPage() {
           }
           setStatus('DASH 播放失败，切换备用方案...')
           fallbackToIframe(article.bilibili_url, video)
+        })
+        player.on('playbackEnded', () => {
+          if (!autoplayNext) return
+          if (seriesVids.length > 1 && seriesCurIdx >= 0 && seriesCurIdx < seriesVids.length - 1) {
+            const next = seriesVids[seriesCurIdx + 1]
+            const isBvidUrl = /^BV[a-zA-Z0-9]+$/.test(params.id as string)
+            const base = isBvidUrl ? window.location.pathname.replace(/\?.*$/, '') : `/play/${params.id}`
+            if (next?.page) window.location.href = `${base}?p=${next.page}`
+          }
         })
         return
       } catch (e: any) {
@@ -185,20 +219,38 @@ export default function PlayPage() {
     await fallbackToIframe(article.bilibili_url, video)
   }
 
-  async function loadByBvid(bvid: string) {
+  async function loadByBvid(bvid: string, page?: number) {
+    activeBvidRef.current = bvid
     setStatus('获取视频信息...')
     const infoRes = await fetch(`/api/bvid/${bvid}`).catch(() => null)
-    let info: { title?: string; cover_url?: string } = {}
+    let info: { title?: string; cover_url?: string; pages?: any[] } = {}
     if (infoRes?.ok) {
       const ij = await infoRes.json().catch(() => ({}))
       if (ij.success) info = ij.data
     }
     if (info.title) document.title = info.title
 
+    // 构造 seriesVids (多 P 视频)
+    if (info.pages?.length) {
+      const vids: SeriesVid[] = info.pages.map((p: { part?: string; page?: number; cover_url?: string; duration?: number }) => ({
+        title: p.part || `第${p.page}集`, bvid,
+        page: p.page || 1,
+        cover_url: p.cover_url || '',
+        duration: p.duration || 0,
+      }))
+      if (vids.length > 1) {
+        setSeriesVids(vids)
+        setSeriesTitle(info.title || bvid)
+        const idx = page ? vids.findIndex((v) => v.page === page) : -1
+        setSeriesCurIdx(idx >= 0 ? idx : 0)
+      }
+    }
+
     setStatus('获取 DASH 流...')
     const qn = localStorage.getItem(`qn-${bvid}`) || 'all'
     const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
-    const mpdUrl = `/api/mpd/${bvid}?qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}`
+    const pageQuery = page && page > 1 ? `&p=${page}` : ''
+    const mpdUrl = `/api/mpd/${bvid}?qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}`
 
     const mpdRes = await fetch(mpdUrl).catch(() => null)
     if (!mpdRes || !mpdRes.ok) {
@@ -206,12 +258,12 @@ export default function PlayPage() {
       console.error('MPD fetch failed:', mpdRes?.status, errBody)
       setStatus(`MPD ${mpdRes?.status}: ${errBody.slice(0, 200)}`)
       await new Promise(r => setTimeout(r, 1500))
-      await fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, videoRef.current!)
+      await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page && page > 1 ? `?p=${page}` : ''}`, videoRef.current!)
       return
     }
 
     // 提取 sources 信息
-    fetch(`/api/mpd/${bvid}/sources`).then(r => r.json()).then(j => {
+    fetch(`/api/mpd/${bvid}/sources${pageQuery ? '?' + pageQuery.slice(1) : ''}`).then(r => r.json()).then(j => {
       if (!j.success) return
       if (j.cdns?.length) { setCdns(j.cdns); cdnsRef.current = j.cdns }
       if (j.qualities?.length) {
@@ -241,6 +293,12 @@ export default function PlayPage() {
       player.on('playbackPlaying', () => { setStatus('') })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
+        errCountRef.current++
+        if (errCountRef.current > MAX_ERR) {
+          setStatus('多次播放失败，切换备用方案...')
+          fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page && page > 1 ? `?p=${page}` : ''}`, video)
+          return
+        }
         const allCdns = cdnsRef.current
         if (allCdns.length > 1) {
           const savedCdn = localStorage.getItem(`cdn-${bvid}`) || '0'
@@ -248,7 +306,7 @@ export default function PlayPage() {
             if (cdn.key === savedCdn) continue
             setStatus(`尝试 CDN: ${cdn.label}`)
             try {
-              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}&_=${Date.now()}`
+              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
               player.reset()
               const rv = videoRef.current
               if (rv) player.attachView(rv)
@@ -262,6 +320,7 @@ export default function PlayPage() {
               })
               localStorage.setItem(`cdn-${bvid}`, cdn.key)
               setCurrentCdn(cdn.key)
+              errCountRef.current = 0
               setStatus('')
               return
             } catch { continue }
@@ -270,16 +329,25 @@ export default function PlayPage() {
         setStatus('DASH 播放失败，切换备用方案...')
         fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, video)
       })
+      player.on('playbackEnded', () => {
+        if (!autoplayNext) return
+        if (seriesVids.length > 1 && seriesCurIdx >= 0 && seriesCurIdx < seriesVids.length - 1) {
+          const next = seriesVids[seriesCurIdx + 1]
+          const isBvidUrl = /^BV[a-zA-Z0-9]+$/.test(params.id as string)
+          const base = isBvidUrl ? window.location.pathname.replace(/\?.*$/, '') : `/play/${params.id}`
+          if (next?.page) window.location.href = `${base}?p=${next.page}`
+        }
+      })
       return
     } catch (e: any) {
       console.error('dashjs init error:', e)
       setStatus('播放器初始化失败，切换备用方案...')
     }
-    await fallbackToIframe(`https://www.bilibili.com/video/${bvid}`, video)
+    await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page && page > 1 ? `?p=${page}` : ''}`, video)
   }
 
   function switchCdn(cdn: Cdn) {
-    const id = params.id as string
+    const id = activeBvidRef.current || (params.id as string)
     setMenuOpen('')
     if (cdn.key === currentCdn) return
     localStorage.setItem(`cdn-${id}`, cdn.key)
@@ -289,7 +357,7 @@ export default function PlayPage() {
   }
 
   function switchQn(q: Quality) {
-    const id = params.id as string
+    const id = activeBvidRef.current || (params.id as string)
     setMenuOpen('')
     if (String(q.qn) === currentQn) return
     localStorage.setItem(`qn-${id}`, String(q.qn))
@@ -299,7 +367,7 @@ export default function PlayPage() {
   }
 
   function switchAudio(a: Audio) {
-    const id = params.id as string
+    const id = activeBvidRef.current || (params.id as string)
     setMenuOpen('')
     if (String(a.id) === currentAudio) return
     localStorage.setItem(`audio-${id}`, String(a.id))
@@ -310,12 +378,21 @@ export default function PlayPage() {
 
   function reloadMpd() {
     const id = params.id as string
+    const activeBvid = activeBvidRef.current
+    // 优先使用实际播放的 bvid (合集模式), 否则回落到 params.id
+    const playbackId = activeBvid || id
+    const isBvid = /^BV[a-zA-Z0-9]+$/.test(playbackId)
     if (playerRef.current) {
-      const cdn = localStorage.getItem(`cdn-${id}`) || '0'
-      const qn = localStorage.getItem(`qn-${id}`) || 'all'
-      const audio = localStorage.getItem(`audio-${id}`) || 'all'
-      const base = /^BV[a-zA-Z0-9]+$/.test(id) ? `/api/mpd/${id}` : `/api/stream/${id}`
-      const newMpd = `${base}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}&_=${Date.now()}`
+      const cdn = localStorage.getItem(`cdn-${playbackId}`) || '0'
+      const qn = localStorage.getItem(`qn-${playbackId}`) || 'all'
+      const audio = localStorage.getItem(`audio-${playbackId}`) || 'all'
+      const base = isBvid ? `/api/mpd/${playbackId}` : `/api/stream/${playbackId}`
+      const pageQuery = (() => {
+        const u = new URL(window.location.href)
+        const p = u.searchParams.get('p')
+        return p ? `&p=${p}` : ''
+      })()
+      const newMpd = `${base}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
       playerRef.current.attachSource(newMpd)
       setStatus('')
     } else {
@@ -426,29 +503,59 @@ async function fallbackToIframe(bilibiliUrl: string, video: HTMLVideoElement) {
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid rgba(255,255,255,.1)', fontFamily: 'sans-serif' }}>
                     {seriesTitle} ({seriesVids.length}集)
                   </div>
-                  {seriesVids.map((v, i) => (
-                    <a
-                      key={i}
-                      href={`/series/${params.id}`}
-                      style={{
-                        display: 'block', padding: '8px 12px', fontFamily: 'sans-serif', fontSize: 13,
-                        color: i === seriesCurIdx ? '#4fc3f7' : '#ccc', textDecoration: 'none',
-                        background: i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent',
-                        borderBottom: '1px solid rgba(255,255,255,.05)',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.08)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent')}
-                    >
-                      {i + 1}. {v.title || `第${i + 1}集`}
-                    </a>
-                  ))}
-                  <a
-                    href={`/series/${params.id}`}
-                    style={{
-                      display: 'block', padding: '8px 12px', fontFamily: 'sans-serif', fontSize: 12,
-                      color: '#fb7299', textDecoration: 'none', textAlign: 'center',
-                    }}
-                  >前往合集播放 →</a>
+                  {seriesVids.map((v, i) => {
+                    const basePath = /^BV[a-zA-Z0-9]+$/.test(params.id as string) ? window.location.pathname.replace(/\?.*$/, '') : `/play/${params.id}`
+                    const epUrl = v.page ? `${basePath}?p=${v.page}` : ''
+                    return (
+                      <a
+                        key={i}
+                        href={epUrl || '#'}
+                        onClick={e => { if (!v.page) return; e.preventDefault(); window.location.href = epUrl }}
+                        style={{
+                          display: 'flex', padding: '6px 8px', fontFamily: 'sans-serif', fontSize: 13,
+                          color: i === seriesCurIdx ? '#4fc3f7' : '#ccc', textDecoration: 'none',
+                          background: i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent',
+                          borderBottom: '1px solid rgba(255,255,255,.05)',
+                          cursor: 'pointer', gap: 8, alignItems: 'flex-start',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.08)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent')}
+                      >
+                        {v.cover_url ? (
+                          <img src={v.cover_url} alt="" loading="lazy" style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 3, flexShrink: 0, background: '#222' }} />
+                        ) : (
+                          <div style={{ width: 56, height: 36, background: '#222', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#444' }}>{i + 1}</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            overflow: 'hidden', display: '-webkit-box',
+                            WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                            lineHeight: 1.3,
+                          }}>
+                            {i + 1}. {v.title || `第${i + 1}集`}
+                          </div>
+                          {v.duration ? (
+                            <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+                              {Math.floor(v.duration / 60)}:{String(v.duration % 60).padStart(2, '0')}
+                            </div>
+                          ) : null}
+                        </div>
+                      </a>
+                    )
+                  })}
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                    fontSize: 12, color: '#ccc', fontFamily: 'sans-serif',
+                    borderTop: '1px solid rgba(255,255,255,.1)', cursor: 'pointer',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={autoplayNext}
+                      onChange={e => setAutoplayNext(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    自动连播
+                  </label>
                 </div>
               )}
             </div>

@@ -84,13 +84,29 @@ function extractAudios(streamData: any): { id: number; label: string; codecs: st
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: any
 ) {
   try {
     const { bvid } = await context.params
     if (!/^BV[a-zA-Z0-9]+$/.test(bvid)) {
       return Response.json({ success: false, error: 'Invalid bvid' }, { status: 400 })
+    }
+    const pageParam = parseInt(request.nextUrl.searchParams.get('p') || '0', 10)
+
+    // 若有多 P 参数, 先获取对应分 P 的 cid
+    let cid: number | undefined
+    if (pageParam > 1) {
+      try {
+        const infoRes = await fetch(`${request.nextUrl.origin}/api/bvid/${bvid}`)
+        if (infoRes.ok) {
+          const infoJson = await infoRes.json()
+          if (infoJson.success && infoJson.data?.pages?.length) {
+            const page = infoJson.data.pages.find((p: { page: number; cid: number }) => p.page === pageParam)
+            if (page?.cid) cid = page.cid
+          }
+        }
+      } catch {}
     }
 
     let data: any = null
@@ -99,7 +115,7 @@ export async function GET(
         const res = await fetch(proxyUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'playurl', bvid, qn: 80 }),
+          body: JSON.stringify({ action: 'playurl', bvid, cid, qn: 80 }),
           signal: AbortSignal.timeout(10000),
         })
         const json = await res.json().catch(() => null)

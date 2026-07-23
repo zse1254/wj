@@ -13,6 +13,7 @@ export async function GET(
       return Response.json({ success: false, error: 'Invalid bvid' }, { status: 400 })
     }
 
+    let pages: { cid: number; page: number; part: string; cover_url?: string; duration?: number }[] = []
     for (const proxyUrl of DENO_PROXIES) {
       try {
         const res = await fetch(proxyUrl, {
@@ -27,9 +28,16 @@ export async function GET(
         let cover = v.cover_url || ''
         if (cover.startsWith('//')) cover = 'https:' + cover
         else if (cover.startsWith('http://')) cover = 'https://' + cover.slice(7)
+        // 提取 pages 信息 (含 cid)
+        if (json.data.series?.videos?.length) {
+          pages = json.data.series.videos.map((sv: { cid?: number; page?: number; title?: string; cover_url?: string; duration?: number }) => ({
+            cid: sv.cid || 0, page: sv.page || 1, part: sv.title || '',
+            cover_url: sv.cover_url || '', duration: sv.duration || 0,
+          })).filter((p: { cid: number }) => p.cid)
+        }
         return Response.json({
           success: true,
-          data: { bvid: v.bvid || bvid, title: v.title || '', cover_url: cover, duration: v.duration || 0, description: v.description || '' },
+          data: { bvid: v.bvid || bvid, title: v.title || '', cover_url: cover, duration: v.duration || 0, description: v.description || '', pages },
         })
       } catch { continue }
     }

@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
-import { query } from '@/lib/db'
+import { query, execute } from '@/lib/db'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { DENO_PROXIES } from '@/lib/deno-proxy'
 
 // 把 URL 的 host 替换为指定 CDN host
 function replaceHost(url: string, newHost: string): string {
@@ -144,15 +146,44 @@ export async function GET(
     }
     const article = articles[0] as any
 
-    if (!article.stream_data || !article.stream_expires_at) {
-      return new Response('Stream data not available', { status: 404, headers: { 'Content-Type': 'text/plain' } })
+    let streamData: any = null
+    let needRefresh = !article.stream_data || !article.stream_expires_at || new Date(article.stream_expires_at) < new Date()
+
+    // 失效/缺失 → 自动从 Deno 重拉 (最多1次, 避免死循环)
+    if (needRefresh) {
+      const bvid = extractBilibiliBvid(article.bilibili_url || '')
+      if (bvid) {
+        for (const proxyUrl of DENO_PROXIES) {
+          try {
+            const res = await fetch(proxyUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'playurl', bvid, qn: 80 }),
+              signal: AbortSignal.timeout(10000),
+            })
+            const json = await res.json().catch(() => null)
+            if (!res.ok || !json?.success || !json.data?.dash) continue
+            let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
+            try {
+              const bu = json.data.dash.video?.[0]?.base_url || json.data.dash.video?.[0]?.baseUrl || ''
+              const dl = new URL(bu).searchParams.get('deadline')
+              if (dl) { const dlMs = Number(dl) * 1000; if (dlMs > Date.now()) expiresAt = new Date(dlMs - 5 * 60 * 1000).toISOString() }
+            } catch {}
+            await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
+              JSON.stringify(json.data), expiresAt, id,
+            ])
+            streamData = json.data
+            break
+          } catch {}
+        }
+      }
+      if (!streamData) {
+        return new Response('Stream data expired or unavailable, refresh failed', { status: 410, headers: { 'Content-Type': 'text/plain' } })
+      }
+    } else {
+      streamData = JSON.parse(article.stream_data)
     }
 
-    if (new Date(article.stream_expires_at) < new Date()) {
-      return new Response('Stream data expired', { status: 410, headers: { 'Content-Type': 'text/plain' } })
-    }
-
-    const streamData = JSON.parse(article.stream_data)
     const mpd = buildMpd(streamData, id, cdnParam, qnParam, audioParam)
 
     return new Response(mpd, {
