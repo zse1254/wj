@@ -134,12 +134,13 @@ export async function GET(
     const cdnParam = request.nextUrl.searchParams.get('cdn') || '0'
     const qnParam = request.nextUrl.searchParams.get('qn') || 'all'
     const audioParam = request.nextUrl.searchParams.get('audio') || 'all'
+    const pageParam = request.nextUrl.searchParams.get('p') || ''
 
-    let articles: any[] = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id]).catch(() => [])
+    let articles: any[] = await query('SELECT id, stream_data, stream_expires_at, content, bilibili_url FROM articles WHERE id = ?', [id]).catch(() => [])
     if (!articles.length) {
       try { await query("ALTER TABLE articles ADD COLUMN stream_data TEXT", []) } catch {}
       try { await query("ALTER TABLE articles ADD COLUMN stream_expires_at TEXT", []) } catch {}
-      articles = await query('SELECT id, stream_data, stream_expires_at FROM articles WHERE id = ?', [id])
+      articles = await query('SELECT id, stream_data, stream_expires_at, content, bilibili_url FROM articles WHERE id = ?', [id])
     }
     if (!articles.length) {
       return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain' } })
@@ -153,12 +154,26 @@ export async function GET(
     if (needRefresh) {
       const bvid = extractBilibiliBvid(article.bilibili_url || '')
       if (bvid) {
+        // 有 ?p= 参数时，尝试从 article.content 取对应 cid
+        let playCid: number | undefined
+        const pParsed = parseInt(pageParam, 10)
+        if (pParsed && article.content) {
+          try {
+            const pv = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
+            if (Array.isArray(pv)) {
+              const found = pv.find((v: { page?: number; cid?: number }) => Number(v.page) === pParsed)
+              if (found?.cid) playCid = Number(found.cid)
+            }
+          } catch {}
+        }
         for (const proxyUrl of DENO_PROXIES) {
           try {
+            const bodyPayload: { action: string; bvid: string; qn: number; cid?: number } = { action: 'playurl', bvid, qn: 80 }
+            if (playCid) bodyPayload.cid = playCid
             const res = await fetch(proxyUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'playurl', bvid, qn: 80 }),
+              body: JSON.stringify(bodyPayload),
               signal: AbortSignal.timeout(10000),
             })
             const json = await res.json().catch(() => null)

@@ -64,7 +64,6 @@ export default function PlayPage() {
     const article = json.data
 
     // 解析合集/系列数据
-    let detectedSeries = false
     if (article.content) {
       try {
         const content = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
@@ -81,10 +80,6 @@ export default function PlayPage() {
             const reqPage = getCurrentPage()
             const idx = reqPage ? vids.findIndex((v: SeriesVid) => v.page === reqPage) : -1
             setSeriesCurIdx(idx >= 0 ? idx : 0)
-            detectedSeries = true
-            // 合集走 bvid+cid 模式, 每次实时从 Deno 拉对应分 P 的 playurl
-            const bvid = vids[idx >= 0 ? idx : 0]?.bvid
-            if (bvid) return loadByBvid(bvid, reqPage || 1)
           }
         }
       } catch {}
@@ -132,7 +127,8 @@ export default function PlayPage() {
       const cdn = localStorage.getItem(`cdn-${id2}`) || '0'
       const qn = localStorage.getItem(`qn-${id2}`) || 'all'
       const audio = localStorage.getItem(`audio-${id2}`) || 'all'
-      const mpdUrl = `/api/stream/${id}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}`
+      const p = (() => { try { return new URL(window.location.href).searchParams.get('p') || '' } catch { return '' } })()
+      const mpdUrl = `/api/stream/${id}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${p ? '&p=' + encodeURIComponent(p) : ''}`
       const mpdRes = await fetch(mpdUrl).catch(() => null)
       if (!mpdRes || !mpdRes.ok) {
         const errBody = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
