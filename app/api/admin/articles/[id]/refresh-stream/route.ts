@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid, fetchBilibiliPlayurl } from '@/lib/bilibili'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { fetchPlayurl } from '@/lib/deno-proxy'
 
 export async function POST(
   _request: NextRequest,
@@ -26,8 +27,8 @@ export async function POST(
     if (!bvid) return Response.json({ success: false, error: 'Invalid bilibili URL' }, { status: 400 })
 
     try {
-      const data = await fetchBilibiliPlayurl(bvid, undefined, 80)
-      if (!data.dash) throw new Error('no dash')
+      const data = await fetchPlayurl(bvid, undefined, 80)
+      if (!data?.dash) throw new Error('no dash')
 
       let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
       try {

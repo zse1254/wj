@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid, fetchBilibiliPlayurl } from '@/lib/bilibili'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { fetchPlayurl } from '@/lib/deno-proxy'
 
 export async function GET(
   _request: NextRequest,
@@ -42,8 +43,8 @@ async function fetchAndStoreStream(articleId: string, bilibiliUrl: string) {
   const bvid = extractBilibiliBvid(bilibiliUrl)
   if (!bvid) return
   try {
-    const data = await fetchBilibiliPlayurl(bvid, undefined, 80)
-    if (data.dash) {
+    const data = await fetchPlayurl(bvid, undefined, 80)
+    if (data?.dash) {
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
       await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
         JSON.stringify(data), expiresAt, articleId,

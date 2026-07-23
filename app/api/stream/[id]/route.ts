@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid, fetchBilibiliPlayurl } from '@/lib/bilibili'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { fetchPlayurl } from '@/lib/deno-proxy'
 
 // 把 URL 的 host 替换为指定 CDN host
 function replaceHost(url: string, newHost: string): string {
@@ -165,7 +166,7 @@ export async function GET(
           } catch {}
         }
         try {
-          const playData = await fetchBilibiliPlayurl(bvid, playCid, 80)
+          const playData = await fetchPlayurl(bvid, playCid, 80)
           if (playData.dash) {
             let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
             try {

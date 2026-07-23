@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchSearch } from '@/lib/bilibili'
+import { fetchSearch } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
 

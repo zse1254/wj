@@ -119,18 +119,33 @@ function md5Sync(input: string): string {
   return toHex(a0) + toHex(b0) + toHex(c0) + toHex(d0)
 }
 
+// B站官方字符重排表（64 项，生成 mixinKey 时只用前 32 项取字符）
+const MIXIN_KEY_ENC_TAB = [
+  46,47,18, 2,53, 8,23,32,15,50,10,31,58, 3,45,35,
+  27,43, 5,49,33, 9,42,19,29,28,14,39,12,38,41,13,
+  37,48, 7,16,24,55,40,61,26,17, 0, 1,60,51,30, 4,
+  22,25,54,21,56,59, 6,63,57,62,11,36,20,34,44,52,
+]
+
+function getMixinKey(imgKey: string, subKey: string): string {
+  const raw = imgKey + subKey  // imgKey 在前，总长 64
+  return MIXIN_KEY_ENC_TAB.map(n => raw[n]).join('').slice(0, 32)
+}
+
 let mixKeyCache: string | null = null
 let mixKeyCacheTs = 0
 async function getMixKey(): Promise<string> {
   if (mixKeyCache && (Date.now() - mixKeyCacheTs) < 3600_000) return mixKeyCache
   const navRes = await fetch('https://api.bilibili.com/x/web-interface/nav', { headers: bilibiliHeaders() })
   const navJson = await navRes.json()
-  if (navJson.code !== 0) throw new Error('nav 接口失败: ' + (navJson.message || 'unknown'))
-  const img = navJson.data.wbi_img || navJson.data?.wbi_img?.img_url || ''
-  const sub = navJson.data.wbi_img || navJson.data?.wbi_img?.sub_url || ''
-  const imgKey = (typeof img === 'string' ? img : '').split('/').pop()?.split('.')[0] || ''
-  const subKey = (typeof sub === 'string' ? sub : '').split('/').pop()?.split('.')[0] || ''
-  mixKeyCache = subKey.substring(0,4) + imgKey.substring(0,4)
+  // nav 未登录时返回 code=-101，但 wbi_img 仍然有效，可直接取用
+  const data = navJson.data || navJson
+  const img = data?.wbi_img?.img_url || ''
+  const sub = data?.wbi_img?.sub_url || ''
+  if (!img || !sub) throw new Error('获取 Wbi 密钥失败: ' + (navJson.message || JSON.stringify(navJson).slice(0,100)))
+  const imgKey = img.split('/').pop()?.split('.')[0] || ''
+  const subKey = sub.split('/').pop()?.split('.')[0] || ''
+  mixKeyCache = getMixinKey(imgKey, subKey)
   mixKeyCacheTs = Date.now()
   return mixKeyCache
 }
@@ -149,71 +164,7 @@ async function wbiSign(params: Record<string, string>): Promise<Record<string, s
   return { ...params, wts: String(ts), w_rid: wRid }
 }
 
-// ---------- Playurl 接口 (直调 B站) ----------
-
-export interface DashStream {
-  id: number; baseUrl: string; backupUrl?: string[]; base_url?: string; backup_url?: string[]
-  bandwidth?: number; bandWidth?: number; codecs?: string; width?: number; height?: number
-  segment_base?: { initialization?: string; index_range?: string }; SegmentBase?: { initialization?: string; indexRange?: string }
-}
-
-export interface PlayurlResult {
-  bvid: string; cid: number; quality: number
-  accept_quality: number[]; accept_qn: number[]
-  video_duration: number
-  dash: { video: DashStream[]; audio: DashStream[]; duration?: number }
-  durl?: any; endpoint?: string
-}
-
-export async function fetchBilibiliPlayurl(bvid: string, cid?: number, qn?: number): Promise<PlayurlResult> {
-  const hdrs = bilibiliHeaders(`https://www.bilibili.com/video/${bvid}`)
-
-  // 无 cid → pagelist 取第一页
-  let resolvedCid = cid
-  if (!resolvedCid) {
-    const plRes = await fetch(`https://api.bilibili.com/x/player/pagelist?bvid=${bvid}`, { headers: hdrs })
-    const plJson = await plRes.json()
-    if (plJson.code !== 0 || !plJson.data?.length) throw new Error('获取 cid 失败: ' + (plJson.message || 'no pages'))
-    resolvedCid = plJson.data[0].cid
-  }
-
-  const targetQn = qn || 80
-  const commonParams = `bvid=${bvid}&cid=${resolvedCid}&qn=${targetQn}&fnval=4048&fourk=1`
-
-  // 策略1: 旧版 /x/player/playurl (不需要 wbi, 匿名也能返 DASH)
-  try {
-    const res = await fetch(`https://api.bilibili.com/x/player/playurl?${commonParams}`, { headers: hdrs })
-    const json = await res.json()
-    if (json.code === 0 && json.data?.dash) {
-      return {
-        bvid, cid: Number(resolvedCid), quality: json.data.quality,
-        accept_quality: json.data.accept_quality || [], accept_qn: json.data.accept_qn || [],
-        video_duration: json.data.dash?.duration || 0,
-        dash: json.data.dash,
-        durl: json.data.durl || null,
-        endpoint: 'playurl',
-      }
-    }
-  } catch {}
-
-  // 策略2: wbi/v2 (匿名可能只返 preview, 但带上签名至少能返数据)
-  const unsigned: Record<string, string> = { bvid, cid: String(resolvedCid), qn: String(targetQn), fnval: '4048', fourk: '1' }
-  const signed = await wbiSign(unsigned)
-  const query = Object.entries(signed).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&')
-  const res = await fetch(`https://api.bilibili.com/x/player/wbi/v2?${query}`, { headers: hdrs })
-  const json = await res.json()
-  if (json.code !== 0) throw new Error('playurl wbi/v2 失败: ' + (json.message || 'unknown'))
-  if (!json.data?.dash) throw new Error('无登录态无法获取 DASH: ' + (json.data?.preview_toast || 'no dash'))
-
-  return {
-    bvid, cid: Number(resolvedCid), quality: json.data.quality,
-    accept_quality: json.data.accept_quality || [], accept_qn: json.data.accept_qn || [],
-    video_duration: json.data.dash?.duration || 0,
-    dash: json.data.dash,
-    durl: json.data.durl || null,
-    endpoint: 'wbi/v2',
-  }
-}
+// Playurl 接口已迁移到 lib/deno-proxy.ts (通过 Deno 代理调用 B站 API)
 
 export interface BilibiliVideo {
   bvid: string
@@ -357,77 +308,6 @@ export async function fetchBilibiliHtmlFallback(bvid: string): Promise<BilibiliH
   return parseBilibiliHtml(html, bvid)
 }
 
-// ---------- 推荐/排行/热门/搜索 (直调 B站 API, 不走 Deno) ----------
-
-function fixPic(pic: string): string {
-  if (!pic) return ''
-  if (pic.startsWith('//')) return 'https:' + pic
-  if (pic.startsWith('http://')) return 'https://' + pic.slice(7)
-  return pic
-}
-
-export interface FeedItem {
-  bvid: string; title: string; author: string; duration: number
-  cover_url: string; play: number; danmaku: number; pts?: number
-}
-
-export async function fetchRcmd(): Promise<FeedItem[]> {
-  const res = await fetch('https://api.bilibili.com/x/web-interface/index/top/feed/rcmd', { headers: bilibiliHeaders() })
-  const json = await res.json()
-  if (json.code !== 0) throw new Error(json.message || '推荐获取失败')
-  return (json.data?.item || []).map((r: any) => ({
-    bvid: r.bvid, title: r.title || '', author: r.owner?.name || r.author_name || '',
-    duration: r.duration || 0, cover_url: fixPic(r.pic),
-    play: r.stat?.view || 0, danmaku: r.stat?.danmaku || 0,
-  }))
-}
-
-export async function fetchRanking(rid?: number): Promise<{ items: FeedItem[]; name: string }> {
-  const res = await fetch(`https://api.bilibili.com/x/web-interface/ranking/v2?rid=${rid || 0}&type=all`, { headers: bilibiliHeaders() })
-  const json = await res.json()
-  if (json.code !== 0) throw new Error(json.message || '排行获取失败')
-  const items = (json.data?.list || []).map((r: any) => ({
-    bvid: r.bvid, title: r.title || '', author: r.owner?.name || r.author || '',
-    duration: r.duration || 0, cover_url: fixPic(r.pic),
-    play: r.stat?.view || 0, danmaku: r.stat?.danmaku || 0, pts: r.pts || 0,
-  }))
-  return { items, name: json.data?.name || '' }
-}
-
-export async function fetchPopular(pn?: number): Promise<FeedItem[]> {
-  const res = await fetch(`https://api.bilibili.com/x/web-interface/popular?pn=${pn || 1}&ps=20`, { headers: bilibiliHeaders() })
-  const json = await res.json()
-  if (json.code !== 0) throw new Error(json.message || '热门获取失败')
-  return (json.data?.list || []).map((r: any) => ({
-    bvid: r.bvid, title: r.title || '', author: r.owner?.name || r.author || '',
-    duration: r.duration || 0, cover_url: fixPic(r.pic),
-    play: r.stat?.view || 0, danmaku: r.stat?.danmaku || 0,
-  }))
-}
-
-// 搜索：必须用 /x/web-interface/wbi/search/type（旧版 /search/default 已废弃只返回推荐词）
-// Wbi 签名已在 fetchBilibiliPlayurl 里实现，此处只调用
-export async function fetchSearch(keyword: string): Promise<FeedItem[]> {
-  const unsigned: Record<string, string> = { keyword, search_type: 'video' }
-  const signed = await wbiSign(unsigned)
-  const query = Object.entries(signed).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&')
-  const res = await fetch(`https://api.bilibili.com/x/web-interface/wbi/search/type?${query}`, { headers: bilibiliHeaders() })
-  const json = await res.json()
-  if (json.code !== 0) throw new Error(json.message || '搜索失败')
-  return (json.data?.result || []).map((r: any) => ({
-    bvid: r.bvid, title: r.title?.replace(/<em class=["']keyword["']>/g,'').replace(/<\/em>/g,'') || r.title || '',
-    author: r.author || r.owner?.name || '', duration: r.duration || 0,
-    cover_url: fixPic(r.pic),
-    play: r.play || r.stat?.view || 0,
-    danmaku: r.danmaku || r.stat?.danmaku || 0,
-  }))
-}
-
-function fixCoverUrl(url: string): string {
-  if (!url) return ''
-  if (url.startsWith('//')) return 'https:' + url
-  if (url.startsWith('http://')) return 'https://' + url.slice(7)
-  return url
-}
-
-export { fixCoverUrl }
+// ---------- 推荐/排行/热门/搜索 ----------
+// 已迁移到 lib/deno-proxy.ts (通过 Deno 代理调用 B站 API)
+// FeedItem 类型和 cover URL 修复也移至 deno-proxy.ts

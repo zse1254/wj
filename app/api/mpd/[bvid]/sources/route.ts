@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchBilibiliPlayurl } from '@/lib/bilibili'
+import { fetchPlayurl } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,7 +111,7 @@ export async function GET(
 
     let data: any = null
     try {
-      data = await fetchBilibiliPlayurl(bvid, cid || undefined, 80)
+      data = await fetchPlayurl(bvid, cid || undefined, 80)
     } catch (err: any) {
       console.error('[mpd/bvid/sources] playurl error:', err.message)
     }

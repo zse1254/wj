@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid, fetchBilibiliPlayurl, fetchBilibiliVideoInfo } from '@/lib/bilibili'
+import { extractBilibiliBvid } from '@/lib/bilibili'
+import { fetchPlayurl, fetchBilibiliInfo } from '@/lib/deno-proxy'
 
 export async function POST(
   request: NextRequest,
@@ -33,8 +34,8 @@ export async function POST(
       if (pMatch) {
         const page = parseInt(pMatch[1], 10)
         try {
-          const infoData = await fetchBilibiliVideoInfo(bvid)
-          const found = infoData.pages.find((p) => p.page === page)
+          const infoData = await fetchBilibiliInfo(`https://www.bilibili.com/video/${bvid}`)
+          const found = (infoData.series?.videos || []).find((v: { page: number; cid: number }) => v.page === page)
           if (found?.cid) cidToUse = Number(found.cid)
         } catch {}
       }
@@ -43,8 +44,8 @@ export async function POST(
     let success = false
     const errors: string[] = []
     try {
-      const playData = await fetchBilibiliPlayurl(bvid, cidToUse || undefined, 80)
-      if (playData.dash) {
+      const playData = await fetchPlayurl(bvid, cidToUse || undefined, 80)
+      if (playData?.dash) {
         let expiresAt = new Date(Date.now() + 50 * 60 * 1000).toISOString()
         try {
           const bu = playData.dash.video?.[0]?.baseUrl || playData.dash.video?.[0]?.base_url || ''

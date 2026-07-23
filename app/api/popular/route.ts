@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchPopular } from '@/lib/bilibili'
+import { fetchPopular } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
 
