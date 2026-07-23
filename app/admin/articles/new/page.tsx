@@ -39,6 +39,9 @@ export default function NewArticlePage() {
   const [batchSaving, setBatchSaving] = useState(false)
   const [batchProgress, setBatchProgress] = useState(0)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [directLinks, setDirectLinks] = useState<{ video: { id: number; url: string; backup: string[]; codecs: string; width: number; height: number }[]; audio: { id: number; url: string; backup: string[]; codecs: string }[] } | null>(null)
+  const [fetchingLinks, setFetchingLinks] = useState(false)
+  const [lastSavedId, setLastSavedId] = useState('')
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(res => {
@@ -230,6 +233,27 @@ export default function NewArticlePage() {
       })
       const data = await res.json()
       if (data.success) {
+        const savedId = data.data?.id || ''
+        setLastSavedId(savedId)
+        // 自动获取直链
+        const bvid = extractBilibiliBvid(form.bilibili_url)
+        if (bvid) {
+          setFetchingLinks(true)
+          try {
+            const lr = await fetch('/api/admin/direct-links', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bvid, page: 1 }),
+            })
+            const lj = await lr.json()
+            if (lj.success) setDirectLinks(lj.data)
+          } catch {}
+          setFetchingLinks(false)
+        }
+        if (!form.published) {
+          setSaving(false)
+          return
+        }
         router.push('/admin/articles')
       } else {
         alert(data.error || '保存失败')
@@ -453,7 +477,7 @@ export default function NewArticlePage() {
         <div className="flex items-center gap-6 pt-2">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.published} onChange={e => setForm(f => ({ ...f, published: e.target.checked }))} />
-            立即发布
+            发布到网站
           </label>
           <div className="flex gap-3 ml-auto">
             <button type="button" onClick={() => router.back()} className="px-4 py-2 border rounded-lg text-sm">取消</button>
@@ -464,6 +488,42 @@ export default function NewArticlePage() {
           </div>
         </div>
       </form>
+
+      {lastSavedId && (directLinks || fetchingLinks) && (
+        <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">
+          <h2 className="text-lg font-bold mb-3">直链</h2>
+          {fetchingLinks && !directLinks && <p className="text-sm text-gray-500">正在获取直链...</p>}
+          {directLinks && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">视频流</p>
+                {directLinks.video.map((v, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-gray-400 w-16 shrink-0">{v.height}p {v.codecs.split(',')[0]}</span>
+                    <input type="text" readOnly value={v.url}
+                      className="flex-1 px-2 py-1 bg-gray-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button type="button" onClick={() => navigator.clipboard.writeText(v.url).then(() => alert('已复制'))}
+                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">音频流</p>
+                {directLinks.audio.map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-gray-400 w-16 shrink-0">{a.codecs.split(',')[0]}</span>
+                    <input type="text" readOnly value={a.url}
+                      className="flex-1 px-2 py-1 bg-gray-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button type="button" onClick={() => navigator.clipboard.writeText(a.url).then(() => alert('已复制'))}
+                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400">播放页: <a href={`/play/${lastSavedId}`} target="_blank" className="text-blue-500 hover:underline">{typeof window !== 'undefined' ? window.location.origin : ''}/play/{lastSavedId}</a></p>
+            </div>
+          )}
+        </div>
+      )}
 
       {seriesInfo && (
         <div className="mt-6 bg-white rounded-xl border p-6 max-w-3xl">

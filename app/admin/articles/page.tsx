@@ -80,7 +80,7 @@ export default function AdminArticlesPage() {
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded ${a.published ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-500'}`}>
-                    {a.published ? '已发布' : '草稿'}
+                    {a.published ? '已发布' : '仅直链'}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-gray-500">{a.category_name || '-'}</td>

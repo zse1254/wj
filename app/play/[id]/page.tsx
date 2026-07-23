@@ -153,15 +153,33 @@ export default function PlayPage() {
     const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
     const pageQuery = page > 1 ? `&p=${page}` : ''
     const mpdUrl = `/api/mpd/${bvid}?qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}`
+    const bilibiliFallbackUrl = `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`
 
-    const mpdRes = await fetch(mpdUrl).catch(() => null)
+    let mpdRes = await fetch(mpdUrl).catch(() => null)
+
+    // 第一次失败 → 触发后台刷新直链 → 重试一次
     if (!mpdRes || !mpdRes.ok) {
       const errBody = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
-      console.error('MPD fetch failed:', mpdRes?.status, errBody)
-      setStatus(`MPD ${mpdRes?.status}: ${errBody.slice(0, 200)}`)
-      await new Promise(r => setTimeout(r, 1500))
-      await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`)
-      return
+      console.error('MPD fetch failed (1st):', mpdRes?.status, errBody)
+      setStatus('直链可能过期，正在刷新...')
+      try {
+        await fetch('/api/refresh-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bvid, page }),
+        })
+      } catch {}
+      await new Promise(r => setTimeout(r, 800))
+      // 重试一次
+      mpdRes = await fetch(`${mpdUrl}&_=${Date.now()}`).catch(() => null)
+      if (!mpdRes || !mpdRes.ok) {
+        const err2 = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
+        console.error('MPD fetch failed (2nd):', mpdRes?.status, err2)
+        setStatus('刷新后仍失败，切换备用方案...')
+        await new Promise(r => setTimeout(r, 1000))
+        await fallbackToIframe(bilibiliFallbackUrl)
+        return
+      }
     }
 
     fetch(`/api/mpd/${bvid}/sources${pageQuery ? '?' + pageQuery.slice(1) : ''}`).then(r => r.json()).then(j => {
@@ -206,7 +224,7 @@ export default function PlayPage() {
         errCountRef.current++
         if (errCountRef.current > MAX_ERR) {
           setStatus('多次播放失败，切换备用方案...')
-          await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`)
+          await fallbackToIframe(bilibiliFallbackUrl)
           return
         }
         const allCdns = cdnsRef.current
@@ -236,7 +254,7 @@ export default function PlayPage() {
             } catch { continue }
           }
         }
-        await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`)
+        await fallbackToIframe(bilibiliFallbackUrl)
       })
       player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
@@ -252,7 +270,7 @@ export default function PlayPage() {
       console.error('dashjs init error:', e)
       setStatus('播放器初始化失败，切换备用方案...')
     }
-    await fallbackToIframe(`https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`)
+    await fallbackToIframe(bilibiliFallbackUrl)
   }
 
   function switchEpisode(idx: number) {
@@ -420,17 +438,15 @@ export default function PlayPage() {
                       </div>
                     </div>
                   ))}
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                    fontSize: 12, color: '#ccc', fontFamily: 'sans-serif',
-                    borderTop: '1px solid rgba(255,255,255,.1)', cursor: 'pointer',
-                  }}>
-                    <input type="checkbox" checked={autoplayNext} onChange={e => setAutoplayNext(e.target.checked)} style={{ cursor: 'pointer' }} />
-                    自动连播
-                  </label>
                 </div>
               )}
             </div>
+          )}
+          {seriesVids.length > 1 && (
+            <button
+              onClick={() => setAutoplayNext(v => !v)}
+              style={{ ...btnStyle, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}
+            >{autoplayNext ? '连播' : '不连播'}</button>
           )}
           <MenuHost label="CDN" current={currentCdn} menuKey="cdn" items={cdns.map(c => ({ key: c.key, label: c.label }))} onSelect={switchCdn} />
           <MenuHost label="画质" current={currentQn} menuKey="qn" items={qualities.map(q => ({ key: String(q.qn), label: q.label, sub: `${q.count}编码` }))} onSelect={switchQn} />

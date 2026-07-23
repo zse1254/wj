@@ -20,6 +20,8 @@ export default function EditArticlePage() {
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
   const [refreshMsg, setRefreshMsg] = useState('')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const [directLinks, setDirectLinks] = useState<{ video: { id: number; url: string; backup: string[]; codecs: string; width: number; height: number }[]; audio: { id: number; url: string; backup: string[]; codecs: string }[] } | null>(null)
+  const [fetchingLinks, setFetchingLinks] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -44,6 +46,19 @@ export default function EditArticlePage() {
               setSeriesInfo({ title: a.title || parsed.title || '', videos: parsed.videos })
             }
           } catch {}
+        }
+        // 自动获取直链
+        if ((a.type === 'video' || a.type === 'series') && a.bilibili_url) {
+          const bv = a.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0]
+          if (bv) {
+            setFetchingLinks(true)
+            fetch('/api/admin/direct-links', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bvid: bv, page: 1 }),
+            }).then(r => r.json()).then(lj => {
+              if (lj.success) setDirectLinks(lj.data)
+            }).finally(() => setFetchingLinks(false))
+          }
         }
       }
     }).finally(() => setLoading(false))
@@ -332,7 +347,7 @@ export default function EditArticlePage() {
         <div className="flex items-center gap-6 pt-2">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.published} onChange={e => setForm(f => ({ ...f, published: e.target.checked }))} />
-            已发布
+            发布到网站
           </label>
           <div className="flex gap-3 ml-auto">
             {form.type === 'series' && form.bilibili_url && (
@@ -376,9 +391,9 @@ export default function EditArticlePage() {
         </div>
 
         {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
-          <>
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm flex items-center gap-3">
-              <span className="text-green-700 font-medium shrink-0">直链链接</span>
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-green-700 font-medium shrink-0">播放页</span>
               <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
                 className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
               <button type="button" onClick={() => {
@@ -389,12 +404,37 @@ export default function EditArticlePage() {
                 复制
               </button>
             </div>
+            {fetchingLinks && !directLinks && <p className="text-xs text-gray-500">正在获取 CDN 直链...</p>}
+            {directLinks && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-gray-500">CDN 视频直链</p>
+                {directLinks.video.slice(0, 3).map((v, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">{v.height}p</span>
+                    <input type="text" readOnly value={v.url}
+                      className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button type="button" onClick={() => navigator.clipboard.writeText(v.url).then(() => alert('已复制'))}
+                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
+                  </div>
+                ))}
+                <p className="text-xs font-medium text-gray-500 mt-1">CDN 音频直链</p>
+                {directLinks.audio.slice(0, 2).map((a, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 w-14 shrink-0">{a.codecs.split('.')[0]}</span>
+                    <input type="text" readOnly value={a.url}
+                      className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
+                    <button type="button" onClick={() => navigator.clipboard.writeText(a.url).then(() => alert('已复制'))}
+                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
+                  </div>
+                ))}
+              </div>
+            )}
             {refreshMsg && (
-              <div className="mt-2 p-2 bg-gray-100 border rounded text-xs font-mono break-all whitespace-pre-wrap">
+              <div className="mt-1 p-2 bg-white border rounded text-xs font-mono break-all whitespace-pre-wrap">
                 {refreshMsg}
               </div>
             )}
-          </>
+          </div>
         )}
       </form>
       {seriesInfo && (
