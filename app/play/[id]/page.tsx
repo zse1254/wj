@@ -80,6 +80,10 @@ export default function PlayPage() {
             const reqPage = getCurrentPage()
             const idx = reqPage ? vids.findIndex((v: SeriesVid) => v.page === reqPage) : -1
             setSeriesCurIdx(idx >= 0 ? idx : 0)
+            // 合集改成走 bvid+page 模式 (避免 D1 stream_data 单一集缓存冲突)
+            // 使用第一集的 bvid + 当前 p 参数, 由 /api/mpd 内部解析 cid
+            const epBvid = vids[idx >= 0 ? idx : 0]?.bvid
+            if (epBvid) return loadByBvid(epBvid, reqPage || 1)
           }
         }
       } catch {}
