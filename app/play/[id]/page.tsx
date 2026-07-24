@@ -56,6 +56,25 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
+  // 首次用户交互后尝试播放（浏览器 autoplay 策略需要用户手势）
+  useEffect(() => {
+    const tryPlay = () => {
+      const v = videoRef.current
+      if (v && v.paused) v.play().catch(() => {})
+      document.removeEventListener('click', tryPlay)
+      document.removeEventListener('touchstart', tryPlay)
+      document.removeEventListener('scroll', tryPlay)
+    }
+    document.addEventListener('click', tryPlay)
+    document.addEventListener('touchstart', tryPlay)
+    document.addEventListener('scroll', tryPlay)
+    return () => {
+      document.removeEventListener('click', tryPlay)
+      document.removeEventListener('touchstart', tryPlay)
+      document.removeEventListener('scroll', tryPlay)
+    }
+  }, [])
+
   useEffect(() => { load() }, [params.id, searchParams])
 
   function getCurrentPage(): number {
