@@ -51,23 +51,22 @@ export default function PlayPage() {
   useEffect(() => {
     document.title = 'Video Player'
     const style = document.createElement('style')
-    style.textContent = 'body{background:#000!important;margin:0!important;overflow:hidden!important}'
+    style.textContent = 'body{background:#000!important;margin:0!important}'
     document.head.appendChild(style)
     return () => { style.remove() }
   }, [])
 
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'BUTTON' || target.closest('button')) return
-      const v = videoRef.current
-      if (v) { v.paused ? v.play().catch(() => {}) : v.pause() }
-    }
-    document.addEventListener('click', onClick)
-    return () => { document.removeEventListener('click', onClick) }
-  }, [])
-
   useEffect(() => { load() }, [params.id, searchParams])
+
+  const handleVideoClick = () => {
+    const v = videoRef.current
+    if (v) { v.paused ? v.play().catch(() => {}) : v.pause() }
+  }
+
+  const handleBgClick = () => {
+    if (menuOpen) setMenuOpen('')
+    if (seriesOpen) setSeriesOpen(false)
+  }
 
   function getCurrentPage(): number {
     const p = parseInt(searchParams.get('p') || '0', 10)
@@ -400,7 +399,14 @@ export default function PlayPage() {
   }
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#000' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100svh', background: '#000' }}
+      onClick={(e) => {
+        const target = e.target as HTMLElement
+        if (target.tagName === 'BUTTON' || target.closest('button')) return
+        handleBgClick()
+        handleVideoClick()
+      }}
+    >
       <video ref={videoRef} controls playsInline
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
