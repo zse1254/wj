@@ -82,6 +82,7 @@ export default function NewArticlePage() {
             videos: data.data.series.videos,
           })
           setSelectedVideos(new Set(data.data.series.videos.map((_: unknown, i: number) => i)))
+          setForm(f => ({ ...f, type: 'series' }))
         }
         setFetching(false)
         return
@@ -113,6 +114,7 @@ export default function NewArticlePage() {
             videos: denoData.data.series.videos,
           })
           setSelectedVideos(new Set(denoData.data.series.videos.map((_: unknown, i: number) => i)))
+          setForm(f => ({ ...f, type: 'series' }))
         }
         setFetching(false)
         return
@@ -148,6 +150,7 @@ export default function NewArticlePage() {
             videos: parsed.series.videos,
           })
           setSelectedVideos(new Set(parsed.series.videos.map((_: unknown, i: number) => i)))
+          setForm(f => ({ ...f, type: 'series' }))
         }
         setFetching(false)
         return
@@ -190,6 +193,7 @@ export default function NewArticlePage() {
                   }))
                   setSeriesInfo({ title: sJson.data.title || '', videos })
                   setSelectedVideos(new Set(videos.map((_: unknown, i: number) => i)))
+                  setForm(f => ({ ...f, type: 'series' }))
                 }
               }
             })()
