@@ -217,22 +217,31 @@ export default function PlayPage() {
         },
       })
       // 必须先注册事件再 initialize
+      let playStarted = false
+      const tryPlay = (): void => {
+        const v = videoRef.current
+        if (!v || playStarted) return
+        if (v.readyState >= 2) {
+          v.play().then(() => { playStarted = true }).catch(() => {})
+        }
+      }
+      // 轮询器：每 500ms 尝试一次，最多 60 次（30 秒）
       const startAutoPlay = (): void => {
         let attempts = 0
-        const maxAttempts = 60
-        const tryPlay = (): void => {
-          const v = videoRef.current
-          if (!v) return
-          if (!v.paused) { return }
-          v.play().catch(() => {})
+        const timer = setInterval(() => {
+          tryPlay()
           attempts++
-          if (attempts < maxAttempts) setTimeout(tryPlay, 500)
-        }
-        tryPlay()
+          if (playStarted || attempts >= 60) clearInterval(timer)
+        }, 500)
+      }
+      // 万一 video 元素的 metadata 加载好了，也尝试一次
+      const onLoadedMeta = (): void => { tryPlay() }
+      if (video) {
+        video.addEventListener('loadedmetadata', onLoadedMeta)
       }
       player.on('streamInitialized', () => { startAutoPlay() })
-      player.on('canPlay', () => { setStatus('') })
-      player.on('playbackPlaying', () => { setStatus('') })
+      player.on('canPlay', () => { setStatus(''); tryPlay() })
+      player.on('playbackPlaying', () => { setStatus(''); playStarted = true })
       player.initialize(video, mpdUrl, true)
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
