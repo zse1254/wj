@@ -217,16 +217,12 @@ export default function PlayPage() {
         },
       })
       player.initialize(video, mpdUrl, true)
-      player.on('playbackPlaying', () => { setStatus('') })
-      player.on('canPlay', () => {
+      player.on('playbackPlaying', () => {
         setStatus('')
         const v = videoRef.current
-        if (v && v.paused) v.play().catch(() => {})
+        if (v && v.muted) { v.muted = false; v.volume = localStorage.getItem('volume') ? parseFloat(localStorage.getItem('volume')!) : 1 }
       })
-      player.on('streamInitialized', () => {
-        const v = videoRef.current
-        if (v) setTimeout(() => v.play().catch(() => {}), 50)
-      })
+      player.on('canPlay', () => { setStatus('') })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
         errCountRef.current++
@@ -398,7 +394,7 @@ export default function PlayPage() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#000' }}>
-      <video ref={videoRef} controls autoPlay playsInline
+      <video ref={videoRef} controls autoPlay muted playsInline
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
       {!usingIframe && (
