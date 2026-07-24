@@ -216,18 +216,21 @@ export default function PlayPage() {
           cmcd: { enabled: false },
         },
       })
-      player.initialize(video, mpdUrl, true)
+      // 必须先注册事件再 initialize，否则 streamInitialized 可能先于事件绑定触发
+      player.on('streamInitialized', () => {
+        // 等 DOM 稳定后尝试播放
+        setTimeout(() => {
+          const v = videoRef.current
+          if (v && v.paused) { v.play().catch(() => {}) }
+        }, 100)
+      })
       player.on('canPlay', () => {
         setStatus('')
         const v = videoRef.current
         if (v && v.paused) { v.play().catch(() => {}) }
       })
       player.on('playbackPlaying', () => { setStatus('') })
-      // streamInitialized fires when MPD is parsed and streams are ready; trigger play here
-      player.on('streamInitialized', () => {
-        const v = videoRef.current
-        if (v && v.paused) { v.play().catch(() => {}) }
-      })
+      player.initialize(video, mpdUrl, true)
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
         errCountRef.current++
