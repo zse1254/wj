@@ -217,8 +217,17 @@ export default function PlayPage() {
         },
       })
       player.initialize(video, mpdUrl, true)
-      player.on('canPlay', () => { setStatus('') })
+      player.on('canPlay', () => {
+        setStatus('')
+        const v = videoRef.current
+        if (v && v.paused) { v.play().catch(() => {}) }
+      })
       player.on('playbackPlaying', () => { setStatus('') })
+      // streamInitialized fires when MPD is parsed and streams are ready; trigger play here
+      player.on('streamInitialized', () => {
+        const v = videoRef.current
+        if (v && v.paused) { v.play().catch(() => {}) }
+      })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
         errCountRef.current++

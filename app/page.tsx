@@ -128,13 +128,8 @@ export default function HomePage() {
                     <h2 className="text-lg font-bold text-gray-900">{tabLabel}</h2>
                     <span className="text-sm text-gray-400">共 {total} 篇</span>
                   </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
-                    {articles.slice(0, 2).map(a => (
-                      <ArticleCard key={a.id} article={a} />
-                    ))}
-                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                    {articles.slice(2).map(a => (
+                    {articles.map(a => (
                       <ArticleCard key={a.id} article={a} />
                     ))}
                   </div>
