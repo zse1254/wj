@@ -216,19 +216,22 @@ export default function PlayPage() {
           cmcd: { enabled: false },
         },
       })
-      // 必须先注册事件再 initialize，否则 streamInitialized 可能先于事件绑定触发
-      player.on('streamInitialized', () => {
-        // 等 DOM 稳定后尝试播放
-        setTimeout(() => {
+      // 必须先注册事件再 initialize
+      const startAutoPlay = (): void => {
+        let attempts = 0
+        const maxAttempts = 60
+        const tryPlay = (): void => {
           const v = videoRef.current
-          if (v && v.paused) { v.play().catch(() => {}) }
-        }, 100)
-      })
-      player.on('canPlay', () => {
-        setStatus('')
-        const v = videoRef.current
-        if (v && v.paused) { v.play().catch(() => {}) }
-      })
+          if (!v) return
+          if (!v.paused) { return }
+          v.play().catch(() => {})
+          attempts++
+          if (attempts < maxAttempts) setTimeout(tryPlay, 500)
+        }
+        tryPlay()
+      }
+      player.on('streamInitialized', () => { startAutoPlay() })
+      player.on('canPlay', () => { setStatus('') })
       player.on('playbackPlaying', () => { setStatus('') })
       player.initialize(video, mpdUrl, true)
       player.on('error', async (e: any) => {
