@@ -76,6 +76,7 @@ export default function EditArticlePage() {
         title: f.title === f.bilibili_url ? v.title : f.title,
         summary: f.summary || v.description || '',
         cover_image: f.cover_image || v.cover_url || '',
+        type: series ? 'series' : f.type,
       }))
       if (series) setSeriesInfo(series)
       setFetching(false)
