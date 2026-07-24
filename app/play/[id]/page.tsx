@@ -56,25 +56,6 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
-  // 首次用户交互后取消静音（muted autoplay 允许播放，但 unmute 需要手势）
-  useEffect(() => {
-    const onInteract = () => {
-      const v = videoRef.current
-      if (v) {
-        if (v.paused) v.play().catch(() => {})
-        if (v.muted) { v.muted = false; v.volume = localStorage.getItem('volume') ? parseFloat(localStorage.getItem('volume')!) : 1 }
-      }
-      document.removeEventListener('click', onInteract)
-      document.removeEventListener('touchstart', onInteract)
-    }
-    document.addEventListener('click', onInteract)
-    document.addEventListener('touchstart', onInteract)
-    return () => {
-      document.removeEventListener('click', onInteract)
-      document.removeEventListener('touchstart', onInteract)
-    }
-  }, [])
-
   useEffect(() => { load() }, [params.id, searchParams])
 
   function getCurrentPage(): number {
@@ -409,7 +390,7 @@ export default function PlayPage() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#000' }}>
-      <video ref={videoRef} controls autoPlay muted playsInline
+      <video ref={videoRef} controls playsInline
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
       {!usingIframe && (
