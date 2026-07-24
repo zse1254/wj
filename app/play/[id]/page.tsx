@@ -56,6 +56,17 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'BUTTON' || target.closest('button')) return
+      const v = videoRef.current
+      if (v) { v.paused ? v.play().catch(() => {}) : v.pause() }
+    }
+    document.addEventListener('click', onClick)
+    return () => { document.removeEventListener('click', onClick) }
+  }, [])
+
   useEffect(() => { load() }, [params.id, searchParams])
 
   function getCurrentPage(): number {
@@ -448,9 +459,10 @@ export default function PlayPage() {
               style={{ ...btnStyle, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}
             >{autoplayNext ? '连播' : '不连播'}</button>
           )}
-          <MenuHost label="CDN" current={currentCdn} menuKey="cdn" items={cdns.map(c => ({ key: c.key, label: c.label }))} onSelect={switchCdn} />
-          <MenuHost label="画质" current={currentQn} menuKey="qn" items={qualities.map(q => ({ key: String(q.qn), label: q.label, sub: `${q.count}编码` }))} onSelect={switchQn} />
-          <MenuHost label="音轨" current={currentAudio} menuKey="audio" items={audios.map(a => ({ key: String(a.id), label: a.label }))} onSelect={switchAudio} />
+          <MenuHost label="换源" current={currentCdn} menuKey="cdn"
+            items={cdns.map((c, i) => ({ key: c.key, label: `源${i + 1}` }))} onSelect={switchCdn} />
+          <button onClick={() => videoRef.current?.requestFullscreen?.().catch(() => {})}
+            style={btnStyle}>全屏</button>
         </div>
       )}
       {(status || error) && (
