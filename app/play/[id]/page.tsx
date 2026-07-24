@@ -56,22 +56,22 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
-  // 首次用户交互后尝试播放（浏览器 autoplay 策略需要用户手势）
+  // 首次用户交互后取消静音（muted autoplay 允许播放，但 unmute 需要手势）
   useEffect(() => {
-    const tryPlay = () => {
+    const onInteract = () => {
       const v = videoRef.current
-      if (v && v.paused) v.play().catch(() => {})
-      document.removeEventListener('click', tryPlay)
-      document.removeEventListener('touchstart', tryPlay)
-      document.removeEventListener('scroll', tryPlay)
+      if (v) {
+        if (v.paused) v.play().catch(() => {})
+        if (v.muted) { v.muted = false; v.volume = localStorage.getItem('volume') ? parseFloat(localStorage.getItem('volume')!) : 1 }
+      }
+      document.removeEventListener('click', onInteract)
+      document.removeEventListener('touchstart', onInteract)
     }
-    document.addEventListener('click', tryPlay)
-    document.addEventListener('touchstart', tryPlay)
-    document.addEventListener('scroll', tryPlay)
+    document.addEventListener('click', onInteract)
+    document.addEventListener('touchstart', onInteract)
     return () => {
-      document.removeEventListener('click', tryPlay)
-      document.removeEventListener('touchstart', tryPlay)
-      document.removeEventListener('scroll', tryPlay)
+      document.removeEventListener('click', onInteract)
+      document.removeEventListener('touchstart', onInteract)
     }
   }, [])
 
@@ -236,11 +236,7 @@ export default function PlayPage() {
         },
       })
       player.initialize(video, mpdUrl, true)
-      player.on('playbackPlaying', () => {
-        setStatus('')
-        const v = videoRef.current
-        if (v && v.muted) { v.muted = false; v.volume = localStorage.getItem('volume') ? parseFloat(localStorage.getItem('volume')!) : 1 }
-      })
+      player.on('playbackPlaying', () => { setStatus('') })
       player.on('canPlay', () => { setStatus('') })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
