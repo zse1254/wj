@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 
 interface Cdn { key: string; label: string; index: number }
@@ -18,7 +18,6 @@ export default function PlayPage() {
   const searchParams = useSearchParams()
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<any>(null)
-  const hlsRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('加载中...')
@@ -35,7 +34,6 @@ export default function PlayPage() {
   const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
   const [seriesOpen, setSeriesOpen] = useState(false)
   const [autoplayNext, setAutoplayNext] = useState(true)
-  const [debugInfo, setDebugInfo] = useState('')
   const cdnsRef = useRef<Cdn[]>([])
   const errCountRef = useRef(0)
   const activeBvidRef = useRef('')
@@ -44,32 +42,23 @@ export default function PlayPage() {
   const seriesCurIdxRef = useRef(-1)
   const MAX_ERR = 2
 
-  useEffect(() => {
-    seriesVidsRef.current = seriesVids
-  }, [seriesVids])
-  useEffect(() => {
-    seriesCurIdxRef.current = seriesCurIdx
-  }, [seriesCurIdx])
+  useEffect(() => { seriesVidsRef.current = seriesVids }, [seriesVids])
+  useEffect(() => { seriesCurIdxRef.current = seriesCurIdx }, [seriesCurIdx])
 
   useEffect(() => {
     document.title = 'Video Player'
-    document.documentElement.style.cssText = 'overflow:hidden;margin:0;padding:0;height:100%'
-    document.body.style.cssText = 'overflow:hidden;margin:0;padding:0;height:100%'
-    return () => {
-      document.documentElement.style.cssText = ''
-      document.body.style.cssText = ''
-    }
+    document.documentElement.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000'
+    document.body.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000;min-height:100vh'
+    return () => { document.documentElement.style.cssText = ''; document.body.style.cssText = '' }
   }, [])
 
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const handler = (e: PointerEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'BUTTON' || target.closest('button')) return
-      if (target.closest('[data-menu]')) return
-      setMenuOpen('')
-      setSeriesOpen(false)
+      const t = e.target as HTMLElement
+      if (t.tagName === 'BUTTON' || t.closest('button') || t.closest('[data-menu]')) return
+      setMenuOpen(''); setSeriesOpen(false)
     }
     el.addEventListener('pointerdown', handler)
     return () => { el.removeEventListener('pointerdown', handler) }
@@ -85,86 +74,60 @@ export default function PlayPage() {
   async function load() {
     const id = params.id as string
     setStatus('加载视频信息...')
-
-    if (/^BV[a-zA-Z0-9]+$/.test(id)) {
-      return loadByBvid(id, getCurrentPage())
-    }
-
+    if (/^BV[a-zA-Z0-9]+$/.test(id)) return loadByBvid(id, getCurrentPage())
     const res = await fetch(`/api/articles/${id}`)
     const json = await res.json()
     if (!json.success || !json.data) { setError('视频不存在'); return }
     const article = json.data
-
     if (article.content) {
       try {
         const content = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
         let videoList: any[] = []
-        if (Array.isArray(content)) {
-          videoList = content
-        } else if (content?.videos && Array.isArray(content.videos)) {
-          videoList = content.videos
-        }
+        if (Array.isArray(content)) videoList = content
+        else if (content?.videos && Array.isArray(content.videos)) videoList = content.videos
         const vids: SeriesVid[] = videoList.map((v: any) => ({
-          title: v.title || '', bvid: v.bvid || '',
-          page: v.page || 1,
-          cover_url: fixUrl(v.cover_url || v.first_frame || ''),
-          duration: v.duration || 0,
+          title: v.title || '', bvid: v.bvid || '', page: v.page || 1,
+          cover_url: fixUrl(v.cover_url || v.first_frame || ''), duration: v.duration || 0,
         })).filter((v: SeriesVid) => v.bvid)
         if (vids.length > 1) {
-          setSeriesVids(vids)
-          setSeriesTitle(article.title || '合集')
+          setSeriesVids(vids); setSeriesTitle(article.title || '合集')
           const reqPage = getCurrentPage()
           const idx = reqPage > 1 ? vids.findIndex((v) => v.page === reqPage) : 0
           setSeriesCurIdx(idx >= 0 ? idx : 0)
-          const epBvid = vids[idx >= 0 ? idx : 0].bvid
-          const epPage = vids[idx >= 0 ? idx : 0].page
-          return loadByBvid(epBvid, epPage)
+          seriesVidsRef.current = vids; seriesCurIdxRef.current = idx >= 0 ? idx : 0
+          return loadByBvid(vids[idx >= 0 ? idx : 0].bvid, vids[idx >= 0 ? idx : 0].page)
         }
-        if (vids.length === 1) {
-          return loadByBvid(vids[0].bvid, vids[0].page)
-        }
+        if (vids.length === 1) return loadByBvid(vids[0].bvid, vids[0].page)
       } catch {}
     }
-
     if (article.bilibili_url) {
       const bvid = article.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0]
       if (bvid) return loadByBvid(bvid, getCurrentPage())
     }
-
     setError('无法解析视频信息')
   }
 
   async function loadByBvid(bvid: string, page: number) {
     if (!page) page = 1
-    activeBvidRef.current = bvid
-    activePageRef.current = page
+    activeBvidRef.current = bvid; activePageRef.current = page
     setStatus('获取视频信息...')
 
     const infoRes = await fetch(`/api/bvid/${bvid}`).catch(() => null)
     let info: { title?: string; cover_url?: string; pages?: any[] } = {}
-    if (infoRes?.ok) {
-      const ij = await infoRes.json().catch(() => ({}))
-      if (ij.success) info = ij.data
-    }
+    if (infoRes?.ok) { const ij = await infoRes.json().catch(() => ({})); if (ij.success) info = ij.data }
     if (info.title) document.title = info.title
 
     if (info.pages?.length && info.pages.length > 1) {
       const vids: SeriesVid[] = info.pages.map((p: any) => ({
-        title: p.part || `第${p.page}集`, bvid,
-        page: p.page || 1,
-        cover_url: fixUrl(p.cover_url || ''),
-        duration: p.duration || 0,
+        title: p.part || `第${p.page}集`, bvid, page: p.page || 1,
+        cover_url: fixUrl(p.cover_url || ''), duration: p.duration || 0,
       }))
-      setSeriesVids(vids)
-      setSeriesTitle(info.title || bvid)
+      setSeriesVids(vids); setSeriesTitle(info.title || bvid)
       const idx = vids.findIndex((v) => v.page === page)
       setSeriesCurIdx(idx >= 0 ? idx : 0)
-      seriesVidsRef.current = vids
-      seriesCurIdxRef.current = idx >= 0 ? idx : 0
+      seriesVidsRef.current = vids; seriesCurIdxRef.current = idx >= 0 ? idx : 0
     } else {
-      setSeriesVids([])
-      seriesVidsRef.current = []
-      seriesCurIdxRef.current = -1
+      setSeriesVids([]); seriesVidsRef.current = []; seriesCurIdxRef.current = -1
     }
 
     setStatus('获取 DASH 流...')
@@ -175,25 +138,12 @@ export default function PlayPage() {
     const bilibiliFallbackUrl = `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`
 
     let mpdRes = await fetch(mpdUrl).catch(() => null)
-
-    // 第一次失败 → 触发后台刷新直链 → 重试一次
     if (!mpdRes || !mpdRes.ok) {
-      const errBody = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
-      console.error('MPD fetch failed (1st):', mpdRes?.status, errBody)
       setStatus('直链可能过期，正在刷新...')
-      try {
-        await fetch('/api/refresh-stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bvid, page }),
-        })
-      } catch {}
+      try { await fetch('/api/refresh-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bvid, page }) }) } catch {}
       await new Promise(r => setTimeout(r, 800))
-      // 重试一次
       mpdRes = await fetch(`${mpdUrl}&_=${Date.now()}`).catch(() => null)
       if (!mpdRes || !mpdRes.ok) {
-        const err2 = mpdRes ? await mpdRes.text().catch(() => '') : '网络错误'
-        console.error('MPD fetch failed (2nd):', mpdRes?.status, err2)
         setStatus('刷新后仍失败，切换备用方案...')
         await new Promise(r => setTimeout(r, 1000))
         await fallbackToIframe(bilibiliFallbackUrl)
@@ -217,14 +167,7 @@ export default function PlayPage() {
 
     setStatus('加载播放器...')
     try {
-      if (playerRef.current) {
-        try { playerRef.current.reset() } catch {}
-        playerRef.current = null
-      }
-      if (hlsRef.current) {
-        try { hlsRef.current.destroy() } catch {}
-        hlsRef.current = null
-      }
+      if (playerRef.current) { try { playerRef.current.reset() } catch {} playerRef.current = null }
       setUsingIframe(false)
       const oldIframe = video.parentElement?.querySelector('iframe')
       if (oldIframe) oldIframe.remove()
@@ -237,33 +180,47 @@ export default function PlayPage() {
         streaming: {
           abr: { autoSwitchBitrate: { video: false, audio: false } },
           cmcd: { enabled: false },
-          buffer: { fastSwitchEnabled: true },
         },
       })
       player.initialize(video, mpdUrl, true)
-      player.on('streamInitialized', () => {
-        const v = videoRef.current
-        if (v) v.play().catch(() => {})
-        setTimeout(async () => {
-          if (!playerRef.current) return
-          const v = videoRef.current
-          if (!v) return
-          if (v.videoWidth > 0) {
-            setStatus('')
-            return
+      player.on('playbackPlaying', () => setStatus(''))
+      player.on('canPlay', () => setStatus(''))
+      player.on('error', async (e: any) => {
+        console.error('dashjs error:', e)
+        errCountRef.current++
+        if (errCountRef.current > MAX_ERR) {
+          setStatus('多次播放失败，切换备用方案...')
+          await fallbackToIframe(bilibiliFallbackUrl)
+          return
+        }
+        const allCdns = cdnsRef.current
+        if (allCdns.length > 1) {
+          const savedCdn = localStorage.getItem(`cdn-${bvid}`) || '0'
+          for (const cdn of allCdns) {
+            if (cdn.key === savedCdn) continue
+            setStatus(`尝试 CDN: ${cdn.label}`)
+            try {
+              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
+              player.reset()
+              const rv = videoRef.current
+              if (rv) player.attachView(rv)
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
+                const onOk = () => { clearTimeout(timeout); resolve() }
+                player.on('streamInitialized', onOk, { once: true })
+                player.on('canPlay', onOk, { once: true })
+                player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
+                player.attachSource(retryMpd)
+              })
+              localStorage.setItem(`cdn-${bvid}`, cdn.key)
+              setCurrentCdn(cdn.key)
+              errCountRef.current = 0
+              setStatus('')
+              return
+            } catch { continue }
           }
-          setStatus('dash.js 无画面，尝试 HLS...')
-          try { playerRef.current.reset() } catch {}
-          playerRef.current = null
-          await tryHls(bvid, page, bilibiliFallbackUrl)
-        }, 3000)
-      })
-      player.on('playbackPlaying', () => { setStatus('') })
-      player.on('canPlay', () => { setStatus('') })
-      player.on('error', async () => {
-        try { playerRef.current?.reset() } catch {}
-        playerRef.current = null
-        await tryHls(bvid, page, bilibiliFallbackUrl)
+        }
+        await fallbackToIframe(bilibiliFallbackUrl)
       })
       player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
@@ -277,52 +234,9 @@ export default function PlayPage() {
       return
     } catch (e: any) {
       console.error('dashjs init error:', e)
-      setStatus('播放器初始化失败，尝试 HLS...')
+      setStatus('播放器初始化失败，切换备用方案...')
     }
-    await tryHls(bvid, page, bilibiliFallbackUrl)
-  }
-
-  async function tryHls(bvid: string, page: number, bilibiliFallbackUrl: string) {
-    const video = videoRef.current
-    if (!video) return
-    const pageQuery = page > 1 ? `?p=${page}` : ''
-    try {
-      const res = await fetch(`/api/hls/${bvid}${pageQuery}`)
-      const json = await res.json()
-      if (!json.success || !json.url) {
-        await fallbackToIframe(bilibiliFallbackUrl)
-        return
-      }
-      setStatus('使用 HLS 播放...')
-      const Hls = (await import('hls.js')).default
-      if (Hls.isSupported()) {
-        const hls = new Hls()
-        hlsRef.current = hls
-        hls.loadSource(json.url)
-        hls.attachMedia(video)
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => {})
-          setStatus('')
-        })
-        hls.on(Hls.Events.ERROR, (_: any, data: any) => {
-          if (data.fatal) {
-            console.error('hls.js fatal:', data)
-            hls.destroy()
-            hlsRef.current = null
-            fallbackToIframe(bilibiliFallbackUrl)
-          }
-        })
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = json.url
-        video.play().catch(() => {})
-        setStatus('')
-      } else {
-        await fallbackToIframe(bilibiliFallbackUrl)
-      }
-    } catch (e: any) {
-      console.error('hls error:', e)
-      await fallbackToIframe(bilibiliFallbackUrl)
-    }
+    await fallbackToIframe(bilibiliFallbackUrl)
   }
 
   function switchEpisode(idx: number) {
@@ -379,21 +293,13 @@ export default function PlayPage() {
   async function fallbackToIframe(bilibiliUrl: string) {
     const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
     if (!bvid) { setError('无法播放此视频'); return }
-    if (playerRef.current) {
-      try { playerRef.current.reset() } catch {}
-      playerRef.current = null
-    }
-    if (hlsRef.current) {
-      try { hlsRef.current.destroy() } catch {}
-      hlsRef.current = null
-    }
+    if (playerRef.current) { try { playerRef.current.reset() } catch {} playerRef.current = null }
     setUsingIframe(true)
     setStatus('')
     const video = videoRef.current
     if (!video) return
     const container = video.parentElement
     if (!container) return
-    video.pause()
     video.style.display = 'none'
     const iframe = document.createElement('iframe')
     iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
@@ -450,10 +356,9 @@ export default function PlayPage() {
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100%', background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
+    <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
       <video ref={videoRef} controls playsInline
-        x5-playsinline="true"
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
       />
       {!usingIframe && (
         <div style={panelStyle}>
@@ -505,8 +410,7 @@ export default function PlayPage() {
             </div>
           )}
           {seriesVids.length > 1 && (
-            <button
-              onClick={() => setAutoplayNext(v => !v)}
+            <button onClick={() => setAutoplayNext(v => !v)}
               style={{ ...btnStyle, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}
             >{autoplayNext ? '连播' : '不连播'}</button>
           )}
@@ -516,12 +420,12 @@ export default function PlayPage() {
             style={btnStyle}>全屏</button>
         </div>
       )}
-      {(status || error || debugInfo) && (
+      {(status || error) && (
         <div style={{
           position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
           color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)',
-          padding: '8px 16px', borderRadius: 8, zIndex: 99,
-        }}>{error || status || debugInfo}</div>
+          padding: '8px 16px', borderRadius: 8,
+        }}>{error || status}</div>
       )}
     </div>
   )
