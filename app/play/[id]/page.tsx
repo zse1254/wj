@@ -232,13 +232,27 @@ export default function PlayPage() {
         streaming: {
           abr: { autoSwitchBitrate: { video: false, audio: false } },
           cmcd: { enabled: false },
+          buffer: { fastSwitchEnabled: true },
         },
       })
       player.initialize(video, mpdUrl, true)
       player.on('streamInitialized', () => {
+        const video = videoRef.current
         const tracks = player.getTracksFor('video')
         const info = tracks.map((t: any) => `${t.width}x${t.height} ${t.codec || ''}`).join(' | ')
-        setDebugInfo(info || 'no video tracks')
+        console.log('[mobile-debug] streamInitialized', {
+          videoReadyState: video?.readyState,
+          videoWidth: video?.videoWidth,
+          videoHeight: video?.videoHeight,
+          tracks: info || 'no video tracks',
+        })
+        setDebugInfo(`tracks: ${info || 'none'} | vw:${video?.videoWidth} vh:${video?.videoHeight}`)
+        if (video) {
+          const playPromise = video.play()
+          if (playPromise?.catch) {
+            playPromise.catch((e: any) => console.error('[mobile-debug] play() failed:', e))
+          }
+        }
       })
       player.on('playbackPlaying', () => { setStatus(''); setDebugInfo('') })
       player.on('canPlay', () => { setStatus('') })
@@ -414,6 +428,7 @@ export default function PlayPage() {
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
       <video ref={videoRef} controls playsInline
+        x5-playsinline="true"
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
       />
       {!usingIframe && (
