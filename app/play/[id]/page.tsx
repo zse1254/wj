@@ -242,12 +242,12 @@ export default function PlayPage() {
           video.play().catch(() => {})
         }
         setTimeout(() => {
+          if (!playerRef.current) return
           const video = videoRef.current
           if (!video) return
           if (video.videoWidth > 0) {
             setStatus('')
           } else {
-            console.log('[debug] videoWidth=0 after 3s, fallback to iframe')
             fallbackToIframe(bilibiliFallbackUrl)
           }
         }, 3000)
@@ -329,12 +329,17 @@ export default function PlayPage() {
   async function fallbackToIframe(bilibiliUrl: string) {
     const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
     if (!bvid) { setError('无法播放此视频'); return }
+    if (playerRef.current) {
+      try { playerRef.current.reset() } catch {}
+      playerRef.current = null
+    }
     setUsingIframe(true)
     setStatus('')
     const video = videoRef.current
     if (!video) return
     const container = video.parentElement
     if (!container) return
+    video.pause()
     video.style.display = 'none'
     const iframe = document.createElement('iframe')
     iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
