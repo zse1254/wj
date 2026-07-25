@@ -18,6 +18,7 @@ export default function PlayPage() {
   const searchParams = useSearchParams()
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('加载中...')
   const [cdns, setCdns] = useState<Cdn[]>([])
@@ -56,17 +57,22 @@ export default function PlayPage() {
     return () => { style.remove() }
   }, [])
 
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e: PointerEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'BUTTON' || target.closest('button')) return
+      setMenuOpen('')
+      setSeriesOpen(false)
+      const v = videoRef.current
+      if (v) { v.paused ? v.play().catch(() => {}) : v.pause() }
+    }
+    el.addEventListener('pointerdown', handler)
+    return () => { el.removeEventListener('pointerdown', handler) }
+  }, [])
+
   useEffect(() => { load() }, [params.id, searchParams])
-
-  const handleVideoClick = () => {
-    const v = videoRef.current
-    if (v) { v.paused ? v.play().catch(() => {}) : v.pause() }
-  }
-
-  const handleBgClick = () => {
-    if (menuOpen) setMenuOpen('')
-    if (seriesOpen) setSeriesOpen(false)
-  }
 
   function getCurrentPage(): number {
     const p = parseInt(searchParams.get('p') || '0', 10)
@@ -399,14 +405,7 @@ export default function PlayPage() {
   }
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100svh', background: '#000' }}
-      onClick={(e) => {
-        const target = e.target as HTMLElement
-        if (target.tagName === 'BUTTON' || target.closest('button')) return
-        handleBgClick()
-        handleVideoClick()
-      }}
-    >
+    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100svh', background: '#000' }}>
       <video ref={videoRef} controls playsInline
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
