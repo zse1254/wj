@@ -37,8 +37,13 @@ function escapeXml(s: string): string {
 function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
-  let streams = data.dash?.video || []
+  let streams = (data.dash?.video || []).filter((v: any) => {
+    const c = (v.codecs || '').toLowerCase()
+    return c.startsWith('avc')
+  })
   let audioStreams = data.dash?.audio || []
+
+  if (streams.length === 0) streams = data.dash?.video || []
 
   if (qnParam && qnParam !== 'all') {
     const qn = parseInt(qnParam, 10)

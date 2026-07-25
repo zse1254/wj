@@ -34,6 +34,7 @@ export default function PlayPage() {
   const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
   const [seriesOpen, setSeriesOpen] = useState(false)
   const [autoplayNext, setAutoplayNext] = useState(true)
+  const [debugInfo, setDebugInfo] = useState('')
   const cdnsRef = useRef<Cdn[]>([])
   const errCountRef = useRef(0)
   const activeBvidRef = useRef('')
@@ -234,7 +235,12 @@ export default function PlayPage() {
         },
       })
       player.initialize(video, mpdUrl, true)
-      player.on('playbackPlaying', () => { setStatus('') })
+      player.on('streamInitialized', () => {
+        const tracks = player.getTracksFor('video')
+        const info = tracks.map((t: any) => `${t.width}x${t.height} ${t.codec || ''}`).join(' | ')
+        setDebugInfo(info || 'no video tracks')
+      })
+      player.on('playbackPlaying', () => { setStatus(''); setDebugInfo('') })
       player.on('canPlay', () => { setStatus('') })
       player.on('error', async (e: any) => {
         console.error('dashjs error:', e)
@@ -406,9 +412,9 @@ export default function PlayPage() {
   }
 
   return (
-    <div ref={containerRef} style={{ width: '100vw', height: '100dvh', background: '#000', touchAction: 'manipulation' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
       <video ref={videoRef} controls playsInline
-        style={{ width: '100vw', height: '100dvh', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
       />
       {!usingIframe && (
         <div style={panelStyle}>
@@ -471,12 +477,12 @@ export default function PlayPage() {
             style={btnStyle}>全屏</button>
         </div>
       )}
-      {(status || error) && (
+      {(status || error || debugInfo) && (
         <div style={{
           position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
           color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)',
-          padding: '8px 16px', borderRadius: 8,
-        }}>{error || status}</div>
+          padding: '8px 16px', borderRadius: 8, zIndex: 99,
+        }}>{error || status || debugInfo}</div>
       )}
     </div>
   )
