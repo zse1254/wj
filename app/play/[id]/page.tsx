@@ -238,30 +238,26 @@ export default function PlayPage() {
       player.initialize(video, mpdUrl, true)
       player.on('streamInitialized', () => {
         const video = videoRef.current
-        const tracks = player.getTracksFor('video')
-        const info = tracks.map((t: any) => `${t.width}x${t.height} ${t.codec || ''}`).join(' | ')
-        console.log('[mobile-debug] streamInitialized', {
-          videoReadyState: video?.readyState,
-          videoWidth: video?.videoWidth,
-          videoHeight: video?.videoHeight,
-          tracks: info || 'no video tracks',
-        })
-        setDebugInfo(`tracks: ${info || 'none'} | vw:${video?.videoWidth} vh:${video?.videoHeight}`)
         if (video) {
-          const playPromise = video.play()
-          if (playPromise?.catch) {
-            playPromise.catch((e: any) => console.error('[mobile-debug] play() failed:', e))
-          }
+          video.play().catch(() => {})
         }
+        setTimeout(() => {
+          const video = videoRef.current
+          if (!video) return
+          if (video.videoWidth > 0) {
+            setStatus('')
+          } else {
+            console.log('[debug] videoWidth=0 after 3s, fallback to iframe')
+            fallbackToIframe(bilibiliFallbackUrl)
+          }
+        }, 3000)
       })
-      player.on('playbackPlaying', () => { setStatus(''); setDebugInfo('') })
+      player.on('playbackPlaying', () => { setStatus('') })
       player.on('canPlay', () => { setStatus('') })
-      // ======== 替换 error 处理逻辑：一次失败就直接 iframe（手机 MSE 不兼容）========
-player.on('error', async (e: any) => {
-  console.error('dashjs error, falling back to iframe:', e)
-  setStatus('不兼容浏览器，使用备用播放器...')
-  await fallbackToIframe(bilibiliFallbackUrl)
-})
+      player.on('error', async (e: any) => {
+        console.error('dashjs error:', e)
+        await fallbackToIframe(bilibiliFallbackUrl)
+      })
       player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
         const idx = seriesCurIdxRef.current
