@@ -174,9 +174,9 @@ export default function PlayPage() {
       video.style.display = 'block'
 
       const shaka: any = await import('shaka-player')
-      const Player = shaka.Player || shaka.default?.Player
+      const Player = shaka.Player
       if (Player && !Player.isBrowserSupported()) {
-        console.warn('shaka-player: browser not supported, fallback to iframe')
+        setStatus('不兼容浏览器，使用备用播放器...')
         await fallbackToIframe(bilibiliFallbackUrl)
         return
       }
