@@ -51,29 +51,11 @@ export default function PlayPage() {
 
   useEffect(() => {
     document.title = 'Video Player'
-    const style = document.createElement('style')
-    style.textContent = 'body{background:#000!important;margin:0!important}'
-    document.head.appendChild(style)
-    const setVh = () => {
-      const h = window.visualViewport ? window.visualViewport.height : window.innerHeight
-      document.documentElement.style.setProperty('--vh', `${h}px`)
-    }
-    setVh()
-    const onResize = () => setVh()
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', onResize)
-      window.visualViewport.addEventListener('scroll', onResize)
-    } else {
-      window.addEventListener('resize', onResize)
-    }
+    document.documentElement.style.cssText = 'height:100%;overflow:hidden'
+    document.body.style.cssText = 'background:#000!important;margin:0!important;height:100%'
     return () => {
-      style.remove()
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', onResize)
-        window.visualViewport.removeEventListener('scroll', onResize)
-      } else {
-        window.removeEventListener('resize', onResize)
-      }
+      document.documentElement.style.cssText = ''
+      document.body.style.cssText = ''
     }
   }, [])
 
@@ -423,7 +405,7 @@ export default function PlayPage() {
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: 'var(--vh, 100vh)', background: '#000' }}>
+    <div ref={containerRef} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#000' }}>
       <video ref={videoRef} controls playsInline
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
