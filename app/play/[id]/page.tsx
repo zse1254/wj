@@ -65,6 +65,7 @@ export default function PlayPage() {
     const handler = (e: PointerEvent) => {
       const target = e.target as HTMLElement
       if (target.tagName === 'BUTTON' || target.closest('button')) return
+      if (target.closest('[data-menu]')) return
       setMenuOpen('')
       setSeriesOpen(false)
     }
@@ -388,10 +389,10 @@ export default function PlayPage() {
   }) {
     if (!items.length) return null
     return (
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }} data-menu>
         <button onClick={() => setMenuOpen(o => o === menuKey ? '' : menuKey)} style={btnStyle}>{label} ▾</button>
         {menuOpen === menuKey && (
-          <div style={menuStyle}>
+          <div style={menuStyle} data-menu>
             {items.map(it => (
               <div key={it.key} onClick={() => onSelect(it)} style={itemStyle(it.key === current)}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.1)')}
@@ -407,12 +408,12 @@ export default function PlayPage() {
   return (
     <div ref={containerRef} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#000' }}>
       <video ref={videoRef} controls playsInline
-        style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block' }}
       />
       {!usingIframe && (
         <div style={panelStyle}>
           {seriesVids.length > 1 && (
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: 'relative' }} data-menu>
               <button onClick={() => setSeriesOpen(o => !o)}
                 style={{ ...btnStyle, background: seriesOpen ? 'rgba(251,114,153,.3)' : 'rgba(0,0,0,.7)' }}
               >剧集 ({seriesVids.length})</button>
@@ -422,7 +423,7 @@ export default function PlayPage() {
                   maxHeight: 360, overflowY: 'auto', minWidth: 280,
                   background: 'rgba(20,20,20,.95)', border: '1px solid rgba(255,255,255,.2)',
                   borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,.5)',
-                }}>
+                }} data-menu>
                   <div style={{ padding: '8px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid rgba(255,255,255,.1)', fontFamily: 'sans-serif' }}>
                     {seriesTitle} ({seriesVids.length}集)
                   </div>
