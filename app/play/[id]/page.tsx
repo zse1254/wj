@@ -18,6 +18,7 @@ export default function PlayPage() {
   const searchParams = useSearchParams()
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<any>(null)
+  const hlsRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('加载中...')
@@ -220,6 +221,10 @@ export default function PlayPage() {
         try { playerRef.current.reset() } catch {}
         playerRef.current = null
       }
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy() } catch {}
+        hlsRef.current = null
+      }
       setUsingIframe(false)
       const oldIframe = video.parentElement?.querySelector('iframe')
       if (oldIframe) oldIframe.remove()
@@ -237,26 +242,28 @@ export default function PlayPage() {
       })
       player.initialize(video, mpdUrl, true)
       player.on('streamInitialized', () => {
-        const video = videoRef.current
-        if (video) {
-          video.play().catch(() => {})
-        }
-        setTimeout(() => {
+        const v = videoRef.current
+        if (v) v.play().catch(() => {})
+        setTimeout(async () => {
           if (!playerRef.current) return
-          const video = videoRef.current
-          if (!video) return
-          if (video.videoWidth > 0) {
+          const v = videoRef.current
+          if (!v) return
+          if (v.videoWidth > 0) {
             setStatus('')
-          } else {
-            fallbackToIframe(bilibiliFallbackUrl)
+            return
           }
+          setStatus('dash.js 无画面，尝试 HLS...')
+          try { playerRef.current.reset() } catch {}
+          playerRef.current = null
+          await tryHls(bvid, page, bilibiliFallbackUrl)
         }, 3000)
       })
       player.on('playbackPlaying', () => { setStatus('') })
       player.on('canPlay', () => { setStatus('') })
-      player.on('error', async (e: any) => {
-        console.error('dashjs error:', e)
-        await fallbackToIframe(bilibiliFallbackUrl)
+      player.on('error', async () => {
+        try { playerRef.current?.reset() } catch {}
+        playerRef.current = null
+        await tryHls(bvid, page, bilibiliFallbackUrl)
       })
       player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
@@ -270,9 +277,52 @@ export default function PlayPage() {
       return
     } catch (e: any) {
       console.error('dashjs init error:', e)
-      setStatus('播放器初始化失败，切换备用方案...')
+      setStatus('播放器初始化失败，尝试 HLS...')
     }
-    await fallbackToIframe(bilibiliFallbackUrl)
+    await tryHls(bvid, page, bilibiliFallbackUrl)
+  }
+
+  async function tryHls(bvid: string, page: number, bilibiliFallbackUrl: string) {
+    const video = videoRef.current
+    if (!video) return
+    const pageQuery = page > 1 ? `?p=${page}` : ''
+    try {
+      const res = await fetch(`/api/hls/${bvid}${pageQuery}`)
+      const json = await res.json()
+      if (!json.success || !json.url) {
+        await fallbackToIframe(bilibiliFallbackUrl)
+        return
+      }
+      setStatus('使用 HLS 播放...')
+      const Hls = (await import('hls.js')).default
+      if (Hls.isSupported()) {
+        const hls = new Hls()
+        hlsRef.current = hls
+        hls.loadSource(json.url)
+        hls.attachMedia(video)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {})
+          setStatus('')
+        })
+        hls.on(Hls.Events.ERROR, (_: any, data: any) => {
+          if (data.fatal) {
+            console.error('hls.js fatal:', data)
+            hls.destroy()
+            hlsRef.current = null
+            fallbackToIframe(bilibiliFallbackUrl)
+          }
+        })
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = json.url
+        video.play().catch(() => {})
+        setStatus('')
+      } else {
+        await fallbackToIframe(bilibiliFallbackUrl)
+      }
+    } catch (e: any) {
+      console.error('hls error:', e)
+      await fallbackToIframe(bilibiliFallbackUrl)
+    }
   }
 
   function switchEpisode(idx: number) {
@@ -332,6 +382,10 @@ export default function PlayPage() {
     if (playerRef.current) {
       try { playerRef.current.reset() } catch {}
       playerRef.current = null
+    }
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy() } catch {}
+      hlsRef.current = null
     }
     setUsingIframe(true)
     setStatus('')
