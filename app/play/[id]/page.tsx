@@ -52,8 +52,8 @@ export default function PlayPage() {
 
   useEffect(() => {
     document.title = 'Video Player'
-    document.documentElement.style.cssText = 'margin:0;padding:0'
-    document.body.style.cssText = 'background:#000!important;margin:0!important;padding:0'
+    document.documentElement.style.cssText = 'overflow:hidden;margin:0;padding:0;height:100%'
+    document.body.style.cssText = 'overflow:hidden;margin:0;padding:0;height:100%'
     return () => {
       document.documentElement.style.cssText = ''
       document.body.style.cssText = ''
@@ -426,7 +426,7 @@ export default function PlayPage() {
   }
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100%', background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
       <video ref={videoRef} controls playsInline
         x5-playsinline="true"
         style={{ width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
