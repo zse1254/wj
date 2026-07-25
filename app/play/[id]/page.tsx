@@ -256,43 +256,12 @@ export default function PlayPage() {
       })
       player.on('playbackPlaying', () => { setStatus(''); setDebugInfo('') })
       player.on('canPlay', () => { setStatus('') })
-      player.on('error', async (e: any) => {
-        console.error('dashjs error:', e)
-        errCountRef.current++
-        if (errCountRef.current > MAX_ERR) {
-          setStatus('多次播放失败，切换备用方案...')
-          await fallbackToIframe(bilibiliFallbackUrl)
-          return
-        }
-        const allCdns = cdnsRef.current
-        if (allCdns.length > 1) {
-          const savedCdn = localStorage.getItem(`cdn-${bvid}`) || '0'
-          for (const cdn of allCdns) {
-            if (cdn.key === savedCdn) continue
-            setStatus(`尝试 CDN: ${cdn.label}`)
-            try {
-              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
-              player.reset()
-              const rv = videoRef.current
-              if (rv) player.attachView(rv)
-              await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
-                const onOk = () => { clearTimeout(timeout); resolve() }
-                player.on('streamInitialized', onOk, { once: true })
-                player.on('canPlay', onOk, { once: true })
-                player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
-                player.attachSource(retryMpd)
-              })
-              localStorage.setItem(`cdn-${bvid}`, cdn.key)
-              setCurrentCdn(cdn.key)
-              errCountRef.current = 0
-              setStatus('')
-              return
-            } catch { continue }
-          }
-        }
-        await fallbackToIframe(bilibiliFallbackUrl)
-      })
+      // ======== 替换 error 处理逻辑：一次失败就直接 iframe（手机 MSE 不兼容）========
+player.on('error', async (e: any) => {
+  console.error('dashjs error, falling back to iframe:', e)
+  setStatus('不兼容浏览器，使用备用播放器...')
+  await fallbackToIframe(bilibiliFallbackUrl)
+})
       player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
         const idx = seriesCurIdxRef.current
