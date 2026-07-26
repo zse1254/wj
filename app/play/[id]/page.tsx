@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
-import { fetchPlayurl, fetchVideoInfo } from '@/lib/bilibili-client'
 
 interface Cdn { key: string; label: string; index: number }
 interface Quality { qn: number; label: string; count: number }
@@ -131,37 +130,23 @@ export default function PlayPage() {
       setSeriesVids([]); seriesVidsRef.current = []; seriesCurIdxRef.current = -1
     }
 
-    setStatus('客户端获取 DASH 流...')
+    setStatus('获取 DASH 流...')
+    const mpdUrl = `/api/mpd/${bvid}?p=${page}`
     const bilibiliFallbackUrl = `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`
 
-    setStatus('客户端获取 DASH 流...')
-    let playData: any = null
-    try {
-      let cid: number | undefined
-      try {
-        const info = await fetchVideoInfo(bvid)
-        if (info.pages?.length && page > 1) {
-          const p = info.pages.find((x: any) => x.page === page)
-          if (p) cid = p.cid
-        }
-      } catch {}
-      playData = await fetchPlayurl(bvid, cid, 80)
-    } catch (e: any) {
-      console.error('客户端获取 DASH 失败:', e)
-      setStatus('无法获取播放链接')
-      await fallbackToIframe(bilibiliFallbackUrl)
-      return
+    let mpdRes = await fetch(mpdUrl).catch(() => null)
+    if (!mpdRes || !mpdRes.ok) {
+      setStatus('直链可能过期，正在刷新...')
+      try { await fetch('/api/refresh-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bvid, page }) }) } catch {}
+      await new Promise(r => setTimeout(r, 800))
+      mpdRes = await fetch(`${mpdUrl}&_=${Date.now()}`).catch(() => null)
+      if (!mpdRes || !mpdRes.ok) {
+        setStatus('刷新后仍失败，切换备用方案...')
+        await new Promise(r => setTimeout(r, 1000))
+        await fallbackToIframe(bilibiliFallbackUrl)
+        return
+      }
     }
-
-    if (!playData || !playData.dash) {
-      await fallbackToIframe(bilibiliFallbackUrl)
-      return
-    }
-
-    // Build MPD client-side
-    const mpdText = buildClientMpd(playData)
-    const mpdBlob = new Blob([mpdText], { type: 'application/dash+xml' })
-    const mpdUrl = URL.createObjectURL(mpdBlob)
 
     const video = videoRef.current
     if (!video) return
@@ -215,62 +200,6 @@ export default function PlayPage() {
       setStatus('播放器初始化失败，切换备用方案...')
     }
     await fallbackToIframe(bilibiliFallbackUrl)
-  }
-
-  function buildClientMpd(data: any): string {
-    const streams = (data.dash?.video || []).filter((v: any) => {
-      const c = (v.codecs || '').toLowerCase()
-      return c.startsWith('avc')
-    })
-    const audioStreams = data.dash?.audio || []
-    const useVid = streams.length > 0 ? streams : (data.dash?.video || [])
-    const dur = data.dash?.duration || 0
-
-    const esc = (s: string) => s.replace(/&/g, '\x26amp;').replace(/</g, '\x26lt;').replace(/>/g, '\x26gt;').replace(/"/g, '\x26quot;')
-    const seg = (s: any) => {
-      const sb = s.segment_base || s.SegmentBase
-      const init = sb?.initialization || sb?.Initialization || '0-131072'
-      const idx = sb?.index_range || sb?.indexRange || '0-131072'
-      const url = s.baseUrl || s.base_url || ''
-      return { url, init, idx }
-    }
-
-    const videoReps = useVid.map((v: any, i: number) => {
-      const { url, init, idx } = seg(v)
-      const codecs = v.codecs || 'avc1.64001F'
-      const w = v.width || 1920; const h = v.height || 1080
-      const bw = v.bandwidth || v.bandWidth || 1000000
-      return `    <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${esc(codecs)}">
-      <BaseURL>${esc(url)}</BaseURL>
-      <SegmentBase indexRange="${idx}">
-        <Initialization range="${init}"/>
-      </SegmentBase>
-    </Representation>`
-    }).join('\n')
-
-    const audioReps = audioStreams.map((a: any, i: number) => {
-      const { url, init, idx } = seg(a)
-      const codecs = a.codecs || 'mp4a.40.2'
-      const bw = a.bandwidth || a.bandWidth || 128000
-      return `    <Representation id="a.id-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${esc(codecs)}">
-      <BaseURL>${esc(url)}</BaseURL>
-      <SegmentBase indexRange="${idx}">
-        <Initialization range="${init}"/>
-      </SegmentBase>
-    </Representation>`
-    }).join('\n')
-
-    return `<?xml version="1.0" encoding="utf-8"?>
-<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT${dur}S" minBufferTime="PT1.500S">
-  <Period id="1" start="PT0S">
-    <AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">
-      ${videoReps}
-    </AdaptationSet>
-    <AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">
-      ${audioReps}
-    </AdaptationSet>
-  </Period>
-</MPD>`
   }
 
   function switchEpisode(idx: number) {
@@ -332,6 +261,7 @@ export default function PlayPage() {
     const iframe = document.createElement('iframe')
     iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups')
     iframe.setAttribute('referrerPolicy', 'no-referrer')
     iframe.setAttribute('allowFullScreen', '')
     container.appendChild(iframe)
