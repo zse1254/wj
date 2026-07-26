@@ -3,7 +3,6 @@ import { fetchPlayurl } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
 
-// 把 URL 的 host 替换为指定 CDN host
 function replaceHost(url: string, newHost: string): string {
   try { const u = new URL(url); u.host = newHost; return u.toString() } catch { return url }
 }
@@ -41,7 +40,7 @@ function escapeXml(s: string): string {
     .replace(/'/g, '\x26apos;')
 }
 
-function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string): string {
+function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string, useProxy = true): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
   let streams = (data.dash?.video || []).filter((v: any) => {
@@ -67,7 +66,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
-  const cdnProxyBase = `/api/cdn-proxy?u=`
+  const proxyBase = useProxy ? '/api/cdn-proxy?u=' : ''
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
@@ -75,10 +74,11 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const w = v.width || 1920
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
-    const proxiedUrl = cdnProxyBase + encodeURIComponent(getUrl(v, cdnParam))
+    const rawUrl = getUrl(v, cdnParam)
+    const segmentUrl = useProxy ? proxyBase + encodeURIComponent(rawUrl) : rawUrl
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
+      <BaseURL>${escapeXml(segmentUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -89,10 +89,11 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const sb = getSegmentBase(a)
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
-    const proxiedUrl = cdnProxyBase + encodeURIComponent(getUrl(a, cdnParam))
+    const rawUrl = getUrl(a, cdnParam)
+    const segmentUrl = useProxy ? proxyBase + encodeURIComponent(rawUrl) : rawUrl
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
+      <BaseURL>${escapeXml(segmentUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -103,10 +104,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
 <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="${durStr}" minBufferTime="PT1.500S">
   <Period id="1" start="PT0S">
     <AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">
-      ${videoReps || '<Representation bandwidth="1"><BaseURL></BaseURL></Representation>'}
+      ${videoReps}
     </AdaptationSet>
     <AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">
-      ${audioReps || '<Representation bandwidth="1"><BaseURL></BaseURL></Representation>'}
+      ${audioReps}
     </AdaptationSet>
   </Period>
 </MPD>`
@@ -125,8 +126,9 @@ export async function GET(
     const qnParam = request.nextUrl.searchParams.get('qn') || 'all'
     const audioParam = request.nextUrl.searchParams.get('audio') || 'all'
     const pageParam = parseInt(request.nextUrl.searchParams.get('p') || '0', 10)
+    const format = request.nextUrl.searchParams.get('format') || 'mpd'
+    const useProxy = request.nextUrl.searchParams.get('proxy') !== '0'
 
-    // 若有多 P 参数, 先获取对应分 P 的 cid
     let cid: number | undefined
     if (pageParam > 1) {
       try {
@@ -141,7 +143,6 @@ export async function GET(
       } catch {}
     }
 
-    // 从 Deno 代理获取 playurl (B站 API 被 CF Workers IP 封锁)
     let data: any = null
     try {
       data = await fetchPlayurl(bvid, cid || undefined, 80)
@@ -153,7 +154,36 @@ export async function GET(
       return new Response('Failed to fetch DASH stream from Bilibili', { status: 502, headers: { 'Content-Type': 'text/plain' } })
     }
 
-    const mpd = buildMpd(data, cdnParam, qnParam, audioParam)
+    if (format === 'json') {
+      const cdnUrls: any[] = []
+      for (const v of (data.dash?.video || [])) {
+        const sb = getSegmentBase(v)
+        cdnUrls.push({
+          type: 'video', id: v.id, codecs: v.codecs, width: v.width, height: v.height,
+          bandwidth: v.bandwidth || v.bandWidth, baseUrl: getUrl(v, cdnParam),
+          backupUrls: (v.backupUrl || v.backup_url || []).map((u: string) => getUrl({ base_url: u }, cdnParam)),
+          initRange: sb.init, indexRange: sb.index,
+        })
+      }
+      for (const a of (data.dash?.audio || [])) {
+        const sb = getSegmentBase(a)
+        cdnUrls.push({
+          type: 'audio', id: a.id, codecs: a.codecs, bandwidth: a.bandwidth || a.bandWidth,
+          baseUrl: getUrl(a, cdnParam),
+          backupUrls: (a.backupUrl || a.backup_url || []).map((u: string) => getUrl({ base_url: u }, cdnParam)),
+          initRange: sb.init, indexRange: sb.index,
+        })
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        data: { duration: data.dash?.duration || data.video_duration || 0, streams: cdnUrls },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
+      })
+    }
+
+    const mpd = buildMpd(data, cdnParam, qnParam, audioParam, useProxy)
 
     return new Response(mpd, {
       status: 200,

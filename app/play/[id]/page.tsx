@@ -1,16 +1,55 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 
 interface Cdn { key: string; label: string; index: number }
-interface Quality { qn: number; label: string; count: number }
-interface Audio { id: number; label: string; codecs: string }
 interface SeriesVid { title: string; bvid: string; page: number; cover_url: string; duration: number }
+interface StreamInfo { duration: number; streams: StreamEntry[] }
+interface StreamEntry {
+  type: 'video' | 'audio'; id: number; codecs: string; width?: number; height?: number
+  bandwidth: number; baseUrl: string; backupUrls: string[]; initRange: string; indexRange: string
+}
 
 function fixUrl(u: string) {
   if (!u) return ''
   return u.replace(/^http:\/\//, 'https://')
+}
+
+function buildMpd(streams: StreamEntry[], duration: number, useProxy: boolean): string {
+  const proxyBase = useProxy ? '/api/cdn-proxy?u=' : ''
+  const videos = streams.filter(s => s.type === 'video')
+  const audios = streams.filter(s => s.type === 'audio')
+
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  const videoReps = videos.map((v, i) => {
+    const segUrl = useProxy ? proxyBase + encodeURIComponent(v.baseUrl) : v.baseUrl
+    return `<Representation id="v-${v.id}-${i}" mimeType="video/mp4" bandwidth="${v.bandwidth}" width="${v.width || 1920}" height="${v.height || 1080}" codecs="${esc(v.codecs || 'avc1.64001F')}">
+      <BaseURL>${esc(segUrl)}</BaseURL>
+      <SegmentBase indexRange="${v.indexRange}"><Initialization range="${v.initRange}"/></SegmentBase>
+    </Representation>`
+  }).join('\n')
+
+  const audioReps = audios.map((a, i) => {
+    const segUrl = useProxy ? proxyBase + encodeURIComponent(a.baseUrl) : a.baseUrl
+    return `<Representation id="a-${a.id}-${i}" mimeType="audio/mp4" bandwidth="${a.bandwidth}" codecs="${esc(a.codecs || 'mp4a.40.2')}">
+      <BaseURL>${esc(segUrl)}</BaseURL>
+      <SegmentBase indexRange="${a.indexRange}"><Initialization range="${a.initRange}"/></SegmentBase>
+    </Representation>`
+  }).join('\n')
+
+  if (!videoReps && !audioReps) return ''
+  return `<?xml version="1.0" encoding="utf-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT${duration}S" minBufferTime="PT1.500S">
+<Period id="1" start="PT0S">
+<AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">${videoReps}</AdaptationSet>
+<AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">${audioReps}</AdaptationSet>
+</Period></MPD>`
+}
+
+function createMpdBlob(mpdText: string): string {
+  return URL.createObjectURL(new Blob([mpdText], { type: 'application/dash+xml' }))
 }
 
 export default function PlayPage() {
@@ -19,28 +58,28 @@ export default function PlayPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState('')
+  const errCountRef = useRef(0)
+  const activeBvidRef = useRef('')
+  const activePageRef = useRef(1)
+  const streamInfoRef = useRef<StreamInfo | null>(null)
+  const retryCountRef = useRef(0)
+  const MAX_RETRY = 3
+
   const [status, setStatus] = useState('加载中...')
-  const [cdns, setCdns] = useState<Cdn[]>([])
-  const [qualities, setQualities] = useState<Quality[]>([])
-  const [audios, setAudios] = useState<Audio[]>([])
-  const [currentCdn, setCurrentCdn] = useState('0')
-  const [currentQn, setCurrentQn] = useState<string>('all')
-  const [currentAudio, setCurrentAudio] = useState<string>('all')
-  const [menuOpen, setMenuOpen] = useState<'' | 'cdn' | 'qn' | 'audio'>('')
+  const [error, setError] = useState('')
   const [usingIframe, setUsingIframe] = useState(false)
+  const [showPlayBtn, setShowPlayBtn] = useState(false)
   const [seriesVids, setSeriesVids] = useState<SeriesVid[]>([])
   const [seriesTitle, setSeriesTitle] = useState('')
   const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
   const [seriesOpen, setSeriesOpen] = useState(false)
   const [autoplayNext, setAutoplayNext] = useState(true)
-  const cdnsRef = useRef<Cdn[]>([])
-  const errCountRef = useRef(0)
-  const activeBvidRef = useRef('')
-  const activePageRef = useRef(1)
+  const [menuOpen, setMenuOpen] = useState<'' | 'cdn'>('')
+  const [currentCdn, setCurrentCdn] = useState('0')
+  const [useProxy, setUseProxy] = useState(true)
+
   const seriesVidsRef = useRef<SeriesVid[]>([])
   const seriesCurIdxRef = useRef(-1)
-  const MAX_ERR = 2
 
   useEffect(() => { seriesVidsRef.current = seriesVids }, [seriesVids])
   useEffect(() => { seriesCurIdxRef.current = seriesCurIdx }, [seriesCurIdx])
@@ -70,6 +109,20 @@ export default function PlayPage() {
     const p = parseInt(searchParams.get('p') || '0', 10)
     return p > 0 ? p : 1
   }
+
+  const destroyPlayer = useCallback(() => {
+    if (playerRef.current) {
+      try { playerRef.current.reset() } catch {}
+      playerRef.current = null
+    }
+    const video = videoRef.current
+    if (video) {
+      try { video.removeAttribute('src'); video.load() } catch {}
+    }
+    streamInfoRef.current = null
+    errCountRef.current = 0
+    retryCountRef.current = 0
+  }, [])
 
   async function load() {
     const id = params.id as string
@@ -109,6 +162,7 @@ export default function PlayPage() {
 
   async function loadByBvid(bvid: string, page: number) {
     if (!page) page = 1
+    destroyPlayer()
     activeBvidRef.current = bvid; activePageRef.current = page
     setStatus('获取视频信息...')
 
@@ -131,84 +185,161 @@ export default function PlayPage() {
     }
 
     setStatus('获取 DASH 流...')
-    const mpdUrl = `/api/mpd/${bvid}?p=${page}`
-    const bilibiliFallbackUrl = `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`
-
-    let mpdRes = await fetch(mpdUrl).catch(() => null)
-    if (!mpdRes || !mpdRes.ok) {
-      setStatus('直链可能过期，正在刷新...')
-      try { await fetch('/api/refresh-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bvid, page }) }) } catch {}
-      await new Promise(r => setTimeout(r, 800))
-      mpdRes = await fetch(`${mpdUrl}&_=${Date.now()}`).catch(() => null)
-      if (!mpdRes || !mpdRes.ok) {
-        setStatus('刷新后仍失败，切换备用方案...')
-        await new Promise(r => setTimeout(r, 1000))
-        await fallbackToIframe(bilibiliFallbackUrl)
+    const jsonRes = await fetch(`/api/mpd/${bvid}?p=${page}&format=json`).catch(() => null)
+    if (!jsonRes || !jsonRes.ok) {
+      setStatus('直链获取失败，正在重试...')
+      await new Promise(r => setTimeout(r, 1000))
+      const retry = await fetch(`/api/mpd/${bvid}?p=${page}&format=json&_=${Date.now()}`).catch(() => null)
+      if (!retry || !retry.ok) {
+        setStatus('切换备用方案...')
+        await fallbackToIframe(bvid, page)
         return
       }
+      const retryJson = await retry.json().catch(() => null)
+      if (!retryJson?.success || !retryJson?.data?.streams?.length) {
+        await fallbackToIframe(bvid, page)
+        return
+      }
+      streamInfoRef.current = retryJson.data
+    } else {
+      const json = await jsonRes.json().catch(() => null)
+      if (!json?.success || !json?.data?.streams?.length) {
+        await fallbackToIframe(bvid, page)
+        return
+      }
+      streamInfoRef.current = json.data
+    }
+
+    const streamInfo = streamInfoRef.current
+    if (!streamInfo?.streams?.length) {
+      await fallbackToIframe(bvid, page)
+      return
+    }
+
+    setStatus('加载播放器...')
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    const isAndroid = /Android/i.test(navigator.userAgent)
+    const isMobile = isIOS || isAndroid
+
+    if (!('MediaSource' in window) || isIOS) {
+      setStatus('当前浏览器使用官方播放器...')
+      await fallbackToIframe(bvid, page)
+      return
     }
 
     const video = videoRef.current
     if (!video) return
 
-    setStatus('加载播放器...')
-
-    // iOS Safari 等不支持 MSE 的环境, 直接用官方播放器兜底
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
-    if (!('MediaSource' in window) || isIOS) {
-      setStatus('当前浏览器使用官方播放器...')
-      await fallbackToIframe(bilibiliFallbackUrl)
-      return
-    }
-
     try {
-      if (playerRef.current) {
-        try { playerRef.current.reset() } catch {}
-        playerRef.current = null
-      }
       setUsingIframe(false)
       const oldIframe = video.parentElement?.querySelector('iframe')
       if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
 
+      const mpdText = buildMpd(streamInfo.streams, streamInfo.duration, useProxy)
+      if (!mpdText) {
+        await fallbackToIframe(bvid, page)
+        return
+      }
+      const mpdUrl = createMpdBlob(mpdText)
+
       const dashjs = await import('dashjs')
       const player = dashjs.MediaPlayer().create()
       playerRef.current = player
+
       player.updateSettings({
         streaming: {
           abr: { autoSwitchBitrate: { video: false, audio: false } },
-          cmcd: { enabled: false },
           buffer: { fastSwitchEnabled: true },
         },
       })
-      player.initialize(video, mpdUrl, true)
-      player.on('playbackPlaying', () => setStatus(''))
-      player.on('canPlay', () => setStatus(''))
-      player.on('error', async (e: any) => {
-        console.error('dashjs error:', e)
-        errCountRef.current++
-        if (errCountRef.current > MAX_ERR) {
-          setStatus('多次播放失败，切换备用方案...')
-          await fallbackToIframe(bilibiliFallbackUrl)
-          return
-        }
-        await fallbackToIframe(bilibiliFallbackUrl)
+
+      player.initialize(video, mpdUrl, false)
+      setShowPlayBtn(true)
+
+      let playbackStarted = false
+
+      player.on('playbackPlaying', () => {
+        setStatus('')
+        setShowPlayBtn(false)
+        playbackStarted = true
       })
+
+      player.on('canPlay', () => {
+        setStatus('')
+      })
+
+      player.on('streamInitialized', () => {
+        setStatus('')
+      })
+
+      player.on('error', async (e: any) => {
+        console.error('[dashjs error]', e)
+        if (playbackStarted) return
+        errCountRef.current++
+        if (errCountRef.current > 2) {
+          if (!useProxy) {
+            setStatus('直接播放失败，切换代理...')
+            errCountRef.current = 0
+            setUseProxy(true)
+            await loadByBvid(bvid, page)
+            return
+          }
+          setStatus('播放失败，切换备用方案...')
+          URL.revokeObjectURL(mpdUrl)
+          await fallbackToIframe(bvid, page)
+        }
+      })
+
+      player.on('playbackError', async (e: any) => {
+        console.error('[dashjs playbackError]', e)
+        if (playbackStarted) return
+        errCountRef.current++
+        if (errCountRef.current > 2) {
+          if (!useProxy) {
+            setStatus('直接播放失败，切换代理...')
+            errCountRef.current = 0
+            setUseProxy(true)
+            await loadByBvid(bvid, page)
+            return
+          }
+          setStatus('播放失败，切换备用方案...')
+          URL.revokeObjectURL(mpdUrl)
+          await fallbackToIframe(bvid, page)
+        }
+      })
+
       player.on('playbackEnded', () => {
+        if (!autoplayNext) return
         const vids = seriesVidsRef.current
         const idx = seriesCurIdxRef.current
-        if (!autoplayNext) return
         if (vids.length > 1 && idx >= 0 && idx < vids.length - 1) {
           const next = vids[idx + 1]
           loadByBvid(next.bvid, next.page)
         }
       })
-      return
+
+      setTimeout(() => {
+        if (!playbackStarted && playerRef.current) {
+          setStatus('点击播放按钮开始')
+        }
+      }, 5000)
+
     } catch (e: any) {
-      console.error('dashjs init error:', e)
+      console.error('[dashjs init error]', e)
       setStatus('播放器初始化失败，切换备用方案...')
+      await fallbackToIframe(bvid, page)
     }
-    await fallbackToIframe(bilibiliFallbackUrl)
+  }
+
+  function handlePlayClick() {
+    const video = videoRef.current
+    if (!video) return
+    setShowPlayBtn(false)
+    video.play().catch(() => {})
+    if (playerRef.current) {
+      try { playerRef.current.play() } catch {}
+    }
   }
 
   function switchEpisode(idx: number) {
@@ -218,50 +349,21 @@ export default function PlayPage() {
     loadByBvid(vids[idx].bvid, vids[idx].page)
   }
 
-  function switchCdn(cdn: Cdn) {
-    const id = activeBvidRef.current
+  function switchCdn(cdnKey: string) {
     setMenuOpen('')
-    if (cdn.key === currentCdn) return
-    localStorage.setItem(`cdn-${id}`, cdn.key)
-    setCurrentCdn(cdn.key)
-    setStatus(`切换 CDN: ${cdn.label}`)
-    reloadMpd()
-  }
-
-  function switchQn(q: Quality) {
+    if (cdnKey === currentCdn) return
     const id = activeBvidRef.current
-    setMenuOpen('')
-    if (String(q.qn) === currentQn) return
-    localStorage.setItem(`qn-${id}`, String(q.qn))
-    setCurrentQn(String(q.qn))
-    setStatus(`切换清晰度: ${q.label}`)
-    reloadMpd()
+    localStorage.setItem(`cdn-${id}`, cdnKey)
+    setCurrentCdn(cdnKey)
+    setStatus(`切换源: 源${parseInt(cdnKey) + 1}`)
+    loadByBvid(activeBvidRef.current, activePageRef.current)
   }
 
-  function switchAudio(a: Audio) {
-    const id = activeBvidRef.current
-    setMenuOpen('')
-    if (String(a.id) === currentAudio) return
-    localStorage.setItem(`audio-${id}`, String(a.id))
-    setCurrentAudio(String(a.id))
-    setStatus(`切换音轨: ${a.label}`)
-    reloadMpd()
-  }
-
-  const playDataRef = useRef<any>(null)
-
-  function reloadMpd() {
-    const bvid = activeBvidRef.current
-    const page = activePageRef.current
-    loadByBvid(bvid, page)
-  }
-
-  async function fallbackToIframe(bilibiliUrl: string) {
-    const bvid = bilibiliUrl?.match(/BV[a-zA-Z0-9]+/)?.[0]
-    if (!bvid) { setError('无法播放此视频'); return }
-    if (playerRef.current) { try { playerRef.current.reset() } catch {} playerRef.current = null }
+  async function fallbackToIframe(bvid: string, page: number) {
+    destroyPlayer()
     setUsingIframe(true)
     setStatus('')
+    setError('')
     const video = videoRef.current
     if (!video) return
     const container = video.parentElement
@@ -270,11 +372,12 @@ export default function PlayPage() {
     const oldIframe = container.querySelector('iframe')
     if (oldIframe) oldIframe.remove()
     const iframe = document.createElement('iframe')
-    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&page=${activePageRef.current || 1}&high_quality=1&autoplay=1`
+    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&page=${page || 1}&high_quality=1&autoplay=0`
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
     iframe.setAttribute('allowFullScreen', '')
     iframe.setAttribute('frameborder', '0')
     iframe.setAttribute('scrolling', 'no')
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups')
     container.appendChild(iframe)
   }
 
@@ -285,7 +388,7 @@ export default function PlayPage() {
   const btnStyle: React.CSSProperties = {
     padding: '6px 12px', fontSize: 12, fontFamily: 'sans-serif',
     background: 'rgba(0,0,0,.7)', color: '#fff', border: '1px solid rgba(255,255,255,.3)',
-    borderRadius: 6, cursor: 'pointer',
+    borderRadius: 6, cursor: 'pointer', backdropFilter: 'blur(4px)',
   }
   const menuStyle: React.CSSProperties = {
     position: 'absolute', top: '100%', right: 0, marginTop: 4,
@@ -300,35 +403,25 @@ export default function PlayPage() {
     borderBottom: '1px solid rgba(255,255,255,.08)',
   })
 
-  function MenuHost({ label, current, items, onSelect, menuKey }: {
-    label: string; current: string
-    items: { key: string; label: string; sub?: string }[]
-    onSelect: (item: any) => void
-    menuKey: 'cdn' | 'qn' | 'audio'
-  }) {
-    if (!items.length) return null
-    return (
-      <div style={{ position: 'relative' }} data-menu>
-        <button onClick={() => setMenuOpen(o => o === menuKey ? '' : menuKey)} style={btnStyle}>{label} ▾</button>
-        {menuOpen === menuKey && (
-          <div style={menuStyle} data-menu>
-            {items.map(it => (
-              <div key={it.key} onClick={() => onSelect(it)} style={itemStyle(it.key === current)}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.1)')}
-                onMouseLeave={e => (e.currentTarget.style.background = it.key === current ? 'rgba(79,195,247,.15)' : 'transparent')}
-              >{it.label}{it.sub && <span style={{ opacity: .6, marginLeft: 6 }}>{it.sub}</span>}</div>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const cdnItems = Array.from({ length: 4 }, (_, i) => ({
+    key: String(i), label: `源${i + 1}`, sub: i === 0 ? '默认' : undefined,
+  }))
 
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
-      <video ref={videoRef} controls playsInline
+      <video ref={videoRef} playsInline
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
       />
+      {showPlayBtn && !usingIframe && (
+        <div onClick={handlePlayClick} style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          width: 72, height: 72, borderRadius: '50%', background: 'rgba(0,0,0,.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', zIndex: 20, border: '2px solid rgba(255,255,255,.3)',
+        }}>
+          <div style={{ width: 0, height: 0, borderStyle: 'solid', borderWidth: '16px 0 16px 28px', borderColor: 'transparent transparent transparent #fff', marginLeft: 6 }} />
+        </div>
+      )}
       {!usingIframe && (
         <div style={panelStyle}>
           {seriesVids.length > 1 && (
@@ -353,10 +446,7 @@ export default function PlayPage() {
                       background: i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent',
                       borderBottom: '1px solid rgba(255,255,255,.05)',
                       cursor: 'pointer', gap: 8, alignItems: 'flex-start',
-                    }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,.08)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = i === seriesCurIdx ? 'rgba(79,195,247,.12)' : 'transparent')}
-                    >
+                    }}>
                       {v.cover_url ? (
                         <img src={v.cover_url} alt="" loading="lazy" style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 3, flexShrink: 0, background: '#222' }} />
                       ) : (
@@ -383,17 +473,27 @@ export default function PlayPage() {
               style={{ ...btnStyle, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}
             >{autoplayNext ? '连播' : '不连播'}</button>
           )}
-          <MenuHost label="换源" current={currentCdn} menuKey="cdn"
-            items={cdns.map((c, i) => ({ key: c.key, label: `源${i + 1}` }))} onSelect={switchCdn} />
+          <div style={{ position: 'relative' }} data-menu>
+            <button onClick={() => setMenuOpen(o => o === 'cdn' ? '' : 'cdn')} style={btnStyle}>换源 ▾</button>
+            {menuOpen === 'cdn' && (
+              <div style={menuStyle} data-menu>
+                {cdnItems.map(it => (
+                  <div key={it.key} onClick={() => switchCdn(it.key)} style={itemStyle(it.key === currentCdn)}>
+                    {it.label}{it.sub && <span style={{ opacity: .6, marginLeft: 6 }}>{it.sub}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={() => videoRef.current?.requestFullscreen?.().catch(() => {})}
             style={btnStyle}>全屏</button>
         </div>
       )}
-      {(status || error) && (
+      {(status || error) && !showPlayBtn && (
         <div style={{
           position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
           color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)',
-          padding: '8px 16px', borderRadius: 8,
+          padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap',
         }}>{error || status}</div>
       )}
     </div>
