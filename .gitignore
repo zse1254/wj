@@ -48,6 +48,9 @@ public/uploads/*
 # opennext build output
 .open-next/
 
+# wrangler local state
+.wrangler/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

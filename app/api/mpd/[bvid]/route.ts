@@ -67,16 +67,18 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
+  const cdnProxyBase = `/api/cdn-proxy?u=`
+
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
     const codecs = v.codecs || 'avc1.64001F'
     const w = v.width || 1920
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
-    const directUrl = getUrl(v, cdnParam)
+    const proxiedUrl = cdnProxyBase + encodeURIComponent(getUrl(v, cdnParam))
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(directUrl)}</BaseURL>
+      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -87,10 +89,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const sb = getSegmentBase(a)
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
-    const directUrl = getUrl(a, cdnParam)
+    const proxiedUrl = cdnProxyBase + encodeURIComponent(getUrl(a, cdnParam))
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(directUrl)}</BaseURL>
+      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>

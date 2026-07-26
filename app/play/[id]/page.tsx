@@ -49,12 +49,7 @@ export default function PlayPage() {
     document.title = 'Video Player'
     document.documentElement.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000'
     document.body.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000;min-height:100vh'
-    // 不发 Referer 给 B站 CDN (签名 URL 自带鉴权, 避免 CDN Referer 校验导致 403)
-    const refMeta = document.createElement('meta')
-    refMeta.name = 'referrer'
-    refMeta.content = 'no-referrer'
-    document.head.appendChild(refMeta)
-    return () => { document.documentElement.style.cssText = ''; document.body.style.cssText = ''; refMeta.remove() }
+    return () => { document.documentElement.style.cssText = ''; document.body.style.cssText = '' }
   }, [])
 
   useEffect(() => {
@@ -272,12 +267,14 @@ export default function PlayPage() {
     const container = video.parentElement
     if (!container) return
     video.style.display = 'none'
+    const oldIframe = container.querySelector('iframe')
+    if (oldIframe) oldIframe.remove()
     const iframe = document.createElement('iframe')
-    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&high_quality=1&autoplay=0`
+    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&page=${activePageRef.current || 1}&high_quality=1&autoplay=1`
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups')
-    iframe.setAttribute('referrerPolicy', 'no-referrer')
     iframe.setAttribute('allowFullScreen', '')
+    iframe.setAttribute('frameborder', '0')
+    iframe.setAttribute('scrolling', 'no')
     container.appendChild(iframe)
   }
 
