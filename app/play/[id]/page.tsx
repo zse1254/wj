@@ -313,7 +313,7 @@ export default function PlayPage() {
         }
       })
 
-      setStatus('准备就绪，请点击播放')
+      setStatus('加载播放器...')
 
     } catch (e: any) {
       console.error('[dashjs init error]', e)
@@ -335,7 +335,7 @@ export default function PlayPage() {
     const id = activeBvidRef.current
     localStorage.setItem(`cdn-${id}`, cdnKey)
     setCurrentCdn(cdnKey)
-    setStatus(`切换源: 源${parseInt(cdnKey) + 1}`)
+    setStatus(`切换源...`)
     loadByBvid(activeBvidRef.current, activePageRef.current)
   }
 
@@ -383,9 +383,15 @@ export default function PlayPage() {
     borderBottom: '1px solid rgba(255,255,255,.08)',
   })
 
-  const cdnItems = Array.from({ length: 4 }, (_, i) => ({
-    key: String(i), label: `源${i + 1}`, sub: i === 0 ? '默认' : undefined,
-  }))
+  const cdnItems = (() => {
+    const streams = streamInfoRef.current?.streams || []
+    const firstVideo = streams.find(s => s.type === 'video')
+    if (!firstVideo) return [{ key: '0', label: '源1', sub: '' }]
+    const total = 1 + (firstVideo.backupUrls?.length || 0)
+    return Array.from({ length: Math.min(total, 8) }, (_, i) => ({
+      key: String(i), label: `源${i + 1}`, sub: i === 0 ? '默认' : '',
+    }))
+  })()
 
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
