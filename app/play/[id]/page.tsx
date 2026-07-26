@@ -62,13 +62,10 @@ export default function PlayPage() {
   const activeBvidRef = useRef('')
   const activePageRef = useRef(1)
   const streamInfoRef = useRef<StreamInfo | null>(null)
-  const retryCountRef = useRef(0)
-  const MAX_RETRY = 3
 
   const [status, setStatus] = useState('加载中...')
   const [error, setError] = useState('')
   const [usingIframe, setUsingIframe] = useState(false)
-  const [showPlayBtn, setShowPlayBtn] = useState(false)
   const [seriesVids, setSeriesVids] = useState<SeriesVid[]>([])
   const [seriesTitle, setSeriesTitle] = useState('')
   const [seriesCurIdx, setSeriesCurIdx] = useState(-1)
@@ -121,7 +118,6 @@ export default function PlayPage() {
     }
     streamInfoRef.current = null
     errCountRef.current = 0
-    retryCountRef.current = 0
   }, [])
 
   async function load() {
@@ -255,13 +251,11 @@ export default function PlayPage() {
       })
 
       player.initialize(video, mpdUrl, false)
-      setShowPlayBtn(true)
 
       let playbackStarted = false
 
       player.on('playbackPlaying', () => {
         setStatus('')
-        setShowPlayBtn(false)
         playbackStarted = true
       })
 
@@ -319,26 +313,12 @@ export default function PlayPage() {
         }
       })
 
-      setTimeout(() => {
-        if (!playbackStarted && playerRef.current) {
-          setStatus('点击播放按钮开始')
-        }
-      }, 5000)
+      setStatus('准备就绪，请点击播放')
 
     } catch (e: any) {
       console.error('[dashjs init error]', e)
       setStatus('播放器初始化失败，切换备用方案...')
       await fallbackToIframe(bvid, page)
-    }
-  }
-
-  function handlePlayClick() {
-    const video = videoRef.current
-    if (!video) return
-    setShowPlayBtn(false)
-    video.play().catch(() => {})
-    if (playerRef.current) {
-      try { playerRef.current.play() } catch {}
     }
   }
 
@@ -409,19 +389,9 @@ export default function PlayPage() {
 
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
-      <video ref={videoRef} playsInline
+      <video ref={videoRef} controls playsInline
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
       />
-      {showPlayBtn && !usingIframe && (
-        <div onClick={handlePlayClick} style={{
-          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-          width: 72, height: 72, borderRadius: '50%', background: 'rgba(0,0,0,.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', zIndex: 20, border: '2px solid rgba(255,255,255,.3)',
-        }}>
-          <div style={{ width: 0, height: 0, borderStyle: 'solid', borderWidth: '16px 0 16px 28px', borderColor: 'transparent transparent transparent #fff', marginLeft: 6 }} />
-        </div>
-      )}
       {!usingIframe && (
         <div style={panelStyle}>
           {seriesVids.length > 1 && (
@@ -489,7 +459,7 @@ export default function PlayPage() {
             style={btnStyle}>全屏</button>
         </div>
       )}
-      {(status || error) && !showPlayBtn && (
+      {(status || error) && (
         <div style={{
           position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
           color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)',
