@@ -60,18 +60,16 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
-  const proxyBase = `https://rustic-mayfly-8854.zse1254.deno.net/proxy?u=`
-
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
     const codecs = v.codecs || 'avc1.64001F'
     const w = v.width || 1920
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
-    const proxiedUrl = proxyBase + encodeURIComponent(getUrl(v, cdnParam))
+    const directUrl = getUrl(v, cdnParam)
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
+      <BaseURL>${escapeXml(directUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -82,10 +80,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const sb = getSegmentBase(a)
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
-    const proxiedUrl = proxyBase + encodeURIComponent(getUrl(a, cdnParam))
+    const directUrl = getUrl(a, cdnParam)
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(proxiedUrl)}</BaseURL>
+      <BaseURL>${escapeXml(directUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
