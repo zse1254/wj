@@ -167,23 +167,30 @@ export default function PlayPage() {
 
     setStatus('加载播放器...')
     try {
-    if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null }
+      if (playerRef.current) {
+        try { playerRef.current.reset() } catch {}
+        playerRef.current = null
+      }
       setUsingIframe(false)
       const oldIframe = video.parentElement?.querySelector('iframe')
       if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
 
-      const shaka: any = await import('shaka-player')
-      const Player = shaka.Player
-      if (Player && !Player.isBrowserSupported()) {
-        setStatus('不兼容浏览器，使用备用播放器...')
-        await fallbackToIframe(bilibiliFallbackUrl)
-        return
-      }
-      const player = new Player(video)
+      const dashjs = await import('dashjs')
+      const player = dashjs.MediaPlayer().create()
       playerRef.current = player
-      player.addEventListener('error', async (e: any) => {
-        console.error('shaka error:', e.detail || e)
+      player.updateSettings({
+        streaming: {
+          abr: { autoSwitchBitrate: { video: false, audio: false } },
+          cmcd: { enabled: false },
+          buffer: { fastSwitchEnabled: true },
+        },
+      })
+      player.initialize(video, mpdUrl, true)
+      player.on('playbackPlaying', () => setStatus(''))
+      player.on('canPlay', () => setStatus(''))
+      player.on('error', async (e: any) => {
+        console.error('dashjs error:', e)
         errCountRef.current++
         if (errCountRef.current > MAX_ERR) {
           setStatus('多次播放失败，切换备用方案...')
@@ -198,7 +205,17 @@ export default function PlayPage() {
             setStatus(`尝试 CDN: ${cdn.label}`)
             try {
               const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
-              await player.load(retryMpd)
+              player.reset()
+              const rv = videoRef.current
+              if (rv) player.attachView(rv)
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
+                const onOk = () => { clearTimeout(timeout); resolve() }
+                player.on('streamInitialized', onOk, { once: true })
+                player.on('canPlay', onOk, { once: true })
+                player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
+                player.attachSource(retryMpd)
+              })
               localStorage.setItem(`cdn-${bvid}`, cdn.key)
               setCurrentCdn(cdn.key)
               errCountRef.current = 0
@@ -209,9 +226,7 @@ export default function PlayPage() {
         }
         await fallbackToIframe(bilibiliFallbackUrl)
       })
-      await player.load(mpdUrl)
-      setStatus('')
-      player.addEventListener('ended', () => {
+      player.on('playbackEnded', () => {
         const vids = seriesVidsRef.current
         const idx = seriesCurIdxRef.current
         if (!autoplayNext) return
@@ -222,7 +237,7 @@ export default function PlayPage() {
       })
       return
     } catch (e: any) {
-      console.error('shaka init error:', e)
+      console.error('dashjs init error:', e)
       setStatus('播放器初始化失败，切换备用方案...')
     }
     await fallbackToIframe(bilibiliFallbackUrl)
@@ -274,7 +289,7 @@ export default function PlayPage() {
       const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
       const pageQuery = page > 1 ? `&p=${page}` : ''
       const newMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
-      playerRef.current.load(newMpd).catch((e: any) => console.error('reloadMpd error:', e))
+      playerRef.current.attachSource(newMpd)
       setStatus('')
     }
   }
