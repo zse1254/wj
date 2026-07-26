@@ -49,7 +49,12 @@ export default function PlayPage() {
     document.title = 'Video Player'
     document.documentElement.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000'
     document.body.style.cssText = 'overflow:hidden;margin:0;padding:0;background:#000;min-height:100vh'
-    return () => { document.documentElement.style.cssText = ''; document.body.style.cssText = '' }
+    // 不发 Referer 给 B站 CDN (签名 URL 自带鉴权, 避免 CDN Referer 校验导致 403)
+    const refMeta = document.createElement('meta')
+    refMeta.name = 'referrer'
+    refMeta.content = 'no-referrer'
+    document.head.appendChild(refMeta)
+    return () => { document.documentElement.style.cssText = ''; document.body.style.cssText = ''; refMeta.remove() }
   }, [])
 
   useEffect(() => {
@@ -152,6 +157,15 @@ export default function PlayPage() {
     if (!video) return
 
     setStatus('加载播放器...')
+
+    // iOS Safari 等不支持 MSE 的环境, 直接用官方播放器兜底
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    if (!('MediaSource' in window) || isIOS) {
+      setStatus('当前浏览器使用官方播放器...')
+      await fallbackToIframe(bilibiliFallbackUrl)
+      return
+    }
+
     try {
       if (playerRef.current) {
         try { playerRef.current.reset() } catch {}
