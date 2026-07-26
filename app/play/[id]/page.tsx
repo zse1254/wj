@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import { fetchPlayurl, fetchVideoInfo } from '@/lib/bilibili-client'
 
 interface Cdn { key: string; label: string; index: number }
 interface Quality { qn: number; label: string; count: number }
@@ -130,37 +131,37 @@ export default function PlayPage() {
       setSeriesVids([]); seriesVidsRef.current = []; seriesCurIdxRef.current = -1
     }
 
-    setStatus('获取 DASH 流...')
-    const qn = localStorage.getItem(`qn-${bvid}`) || 'all'
-    const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
-    const pageQuery = page > 1 ? `&p=${page}` : ''
-    const mpdUrl = `/api/mpd/${bvid}?qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}`
+    setStatus('客户端获取 DASH 流...')
     const bilibiliFallbackUrl = `https://www.bilibili.com/video/${bvid}${page > 1 ? `?p=${page}` : ''}`
 
-    let mpdRes = await fetch(mpdUrl).catch(() => null)
-    if (!mpdRes || !mpdRes.ok) {
-      setStatus('直链可能过期，正在刷新...')
-      try { await fetch('/api/refresh-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bvid, page }) }) } catch {}
-      await new Promise(r => setTimeout(r, 800))
-      mpdRes = await fetch(`${mpdUrl}&_=${Date.now()}`).catch(() => null)
-      if (!mpdRes || !mpdRes.ok) {
-        setStatus('刷新后仍失败，切换备用方案...')
-        await new Promise(r => setTimeout(r, 1000))
-        await fallbackToIframe(bilibiliFallbackUrl)
-        return
-      }
+    setStatus('客户端获取 DASH 流...')
+    let playData: any = null
+    try {
+      let cid: number | undefined
+      try {
+        const info = await fetchVideoInfo(bvid)
+        if (info.pages?.length && page > 1) {
+          const p = info.pages.find((x: any) => x.page === page)
+          if (p) cid = p.cid
+        }
+      } catch {}
+      playData = await fetchPlayurl(bvid, cid, 80)
+    } catch (e: any) {
+      console.error('客户端获取 DASH 失败:', e)
+      setStatus('无法获取播放链接')
+      await fallbackToIframe(bilibiliFallbackUrl)
+      return
     }
 
-    fetch(`/api/mpd/${bvid}/sources${pageQuery ? '?' + pageQuery.slice(1) : ''}`).then(r => r.json()).then(j => {
-      if (!j.success) return
-      if (j.cdns?.length) { setCdns(j.cdns); cdnsRef.current = j.cdns }
-      if (j.qualities?.length) {
-        setQualities(j.qualities)
-        const maxQn = j.qualities.reduce((a: Quality, b: Quality) => a.qn > b.qn ? a : b)
-        setCurrentQn(String(maxQn.qn))
-      }
-      if (j.audios?.length) setAudios(j.audios)
-    }).catch(() => {})
+    if (!playData || !playData.dash) {
+      await fallbackToIframe(bilibiliFallbackUrl)
+      return
+    }
+
+    // Build MPD client-side
+    const mpdText = buildClientMpd(playData)
+    const mpdBlob = new Blob([mpdText], { type: 'application/dash+xml' })
+    const mpdUrl = URL.createObjectURL(mpdBlob)
 
     const video = videoRef.current
     if (!video) return
@@ -197,33 +198,6 @@ export default function PlayPage() {
           await fallbackToIframe(bilibiliFallbackUrl)
           return
         }
-        const allCdns = cdnsRef.current
-        if (allCdns.length > 1) {
-          const savedCdn = localStorage.getItem(`cdn-${bvid}`) || '0'
-          for (const cdn of allCdns) {
-            if (cdn.key === savedCdn) continue
-            setStatus(`尝试 CDN: ${cdn.label}`)
-            try {
-              const retryMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn.key)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
-              player.reset()
-              const rv = videoRef.current
-              if (rv) player.attachView(rv)
-              await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('timeout')), 4000)
-                const onOk = () => { clearTimeout(timeout); resolve() }
-                player.on('streamInitialized', onOk, { once: true })
-                player.on('canPlay', onOk, { once: true })
-                player.on('error', () => { clearTimeout(timeout); reject(new Error('cdn fail')) }, { once: true })
-                player.attachSource(retryMpd)
-              })
-              localStorage.setItem(`cdn-${bvid}`, cdn.key)
-              setCurrentCdn(cdn.key)
-              errCountRef.current = 0
-              setStatus('')
-              return
-            } catch { continue }
-          }
-        }
         await fallbackToIframe(bilibiliFallbackUrl)
       })
       player.on('playbackEnded', () => {
@@ -241,6 +215,62 @@ export default function PlayPage() {
       setStatus('播放器初始化失败，切换备用方案...')
     }
     await fallbackToIframe(bilibiliFallbackUrl)
+  }
+
+  function buildClientMpd(data: any): string {
+    const streams = (data.dash?.video || []).filter((v: any) => {
+      const c = (v.codecs || '').toLowerCase()
+      return c.startsWith('avc')
+    })
+    const audioStreams = data.dash?.audio || []
+    const useVid = streams.length > 0 ? streams : (data.dash?.video || [])
+    const dur = data.dash?.duration || 0
+
+    const esc = (s: string) => s.replace(/&/g, '\x26amp;').replace(/</g, '\x26lt;').replace(/>/g, '\x26gt;').replace(/"/g, '\x26quot;')
+    const seg = (s: any) => {
+      const sb = s.segment_base || s.SegmentBase
+      const init = sb?.initialization || sb?.Initialization || '0-131072'
+      const idx = sb?.index_range || sb?.indexRange || '0-131072'
+      const url = s.baseUrl || s.base_url || ''
+      return { url, init, idx }
+    }
+
+    const videoReps = useVid.map((v: any, i: number) => {
+      const { url, init, idx } = seg(v)
+      const codecs = v.codecs || 'avc1.64001F'
+      const w = v.width || 1920; const h = v.height || 1080
+      const bw = v.bandwidth || v.bandWidth || 1000000
+      return `    <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${esc(codecs)}">
+      <BaseURL>${esc(url)}</BaseURL>
+      <SegmentBase indexRange="${idx}">
+        <Initialization range="${init}"/>
+      </SegmentBase>
+    </Representation>`
+    }).join('\n')
+
+    const audioReps = audioStreams.map((a: any, i: number) => {
+      const { url, init, idx } = seg(a)
+      const codecs = a.codecs || 'mp4a.40.2'
+      const bw = a.bandwidth || a.bandWidth || 128000
+      return `    <Representation id="a.id-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${esc(codecs)}">
+      <BaseURL>${esc(url)}</BaseURL>
+      <SegmentBase indexRange="${idx}">
+        <Initialization range="${init}"/>
+      </SegmentBase>
+    </Representation>`
+    }).join('\n')
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="PT${dur}S" minBufferTime="PT1.500S">
+  <Period id="1" start="PT0S">
+    <AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">
+      ${videoReps}
+    </AdaptationSet>
+    <AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">
+      ${audioReps}
+    </AdaptationSet>
+  </Period>
+</MPD>`
   }
 
   function switchEpisode(idx: number) {
@@ -280,18 +310,12 @@ export default function PlayPage() {
     reloadMpd()
   }
 
+  const playDataRef = useRef<any>(null)
+
   function reloadMpd() {
     const bvid = activeBvidRef.current
     const page = activePageRef.current
-    if (playerRef.current) {
-      const cdn = localStorage.getItem(`cdn-${bvid}`) || '0'
-      const qn = localStorage.getItem(`qn-${bvid}`) || 'all'
-      const audio = localStorage.getItem(`audio-${bvid}`) || 'all'
-      const pageQuery = page > 1 ? `&p=${page}` : ''
-      const newMpd = `/api/mpd/${bvid}?cdn=${encodeURIComponent(cdn)}&qn=${encodeURIComponent(qn)}&audio=${encodeURIComponent(audio)}${pageQuery}&_=${Date.now()}`
-      playerRef.current.attachSource(newMpd)
-      setStatus('')
-    }
+    loadByBvid(bvid, page)
   }
 
   async function fallbackToIframe(bilibiliUrl: string) {
