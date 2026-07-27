@@ -41,7 +41,7 @@ export default function PlayPage() {
   const pageRef = useRef(1)
   const vsRef = useRef<SeriesVid[]>([])
   const ciRef = useRef(-1)
-  const MAX_ERR = 2
+  const MAX_ERR = 5
 
   const [status, setStatus] = useState('加载中...')
   const [usingIframe, setUsingIframe] = useState(false)
@@ -94,9 +94,44 @@ export default function PlayPage() {
     const iframe = document.createElement('iframe')
     iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&page=${page || 1}&high_quality=1&autoplay=1`
     iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
-    iframe.setAttribute('allowFullScreen', 'true')
+    iframe.setAttribute('allowFullScreen', 'false')
     iframe.setAttribute('frameborder', '0')
     iframe.setAttribute('scrolling', 'no')
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
+    iframe.setAttribute('allow', 'autoplay; encrypted-media')
+    // Block all clicks on iframe that would navigate
+    iframe.addEventListener('load', () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document
+        if (doc) {
+          doc.addEventListener('click', (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            const target = e.target as HTMLElement
+            const link = target.closest('a')
+            if (link) {
+              link.removeAttribute('href')
+              link.style.pointerEvents = 'none'
+            }
+          }, true)
+        }
+      } catch {}
+      // Fallback: overlay div to block all iframe clicks
+      const overlay = document.createElement('div')
+      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;background:transparent;cursor:default'
+      overlay.addEventListener('click', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        return false
+      })
+      const parent = iframe.parentElement
+      if (parent) {
+        parent.appendChild(overlay)
+        // Push overlay behind controls but over iframe
+        setTimeout(() => overlay.style.zIndex = '1', 500)
+      }
+    })
     c.appendChild(iframe)
   }
 

@@ -67,7 +67,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
-  const proxyBase = '/api/cdn-proxy?u='
+  const proxyBase = 'https://rustic-mayfly-8854.zse1254.deno.net/proxy?u='
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
