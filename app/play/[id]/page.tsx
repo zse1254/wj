@@ -206,6 +206,11 @@ export default function PlayPage() {
     if (puRes?.ok) {
       const puJson = await puRes.json().catch(() => ({}))
       directUrl = (puJson as any).directUrl || ''
+      // If durl is empty (fnval=4048 returns no durl), use DASH video baseUrl for mobile
+      // B站 m4s files are fragmented MP4 — <video> can play them directly
+      if (!directUrl) {
+        directUrl = (puJson as any).dashVideoUrl || ''
+      }
     }
 
     const video = videoRef.current
