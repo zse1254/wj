@@ -45,9 +45,34 @@ export async function GET(
       return Response.json({ success: false, error: 'DASH 数据不可用' }, { status: 502 })
     }
 
+    // Extract durl (muxed single-file URL, works with <video> tag directly)
+    let durlUrl = ''
+    if (data.durl && Array.isArray(data.durl) && data.durl.length > 0) {
+      const first = data.durl[0]
+      durlUrl = first.url || ''
+      if (!durlUrl && first.backup_url && Array.isArray(first.backup_url) && first.backup_url.length > 0) {
+        durlUrl = first.backup_url[0]
+      }
+    }
+
+    // Also extract from dash
+    let dashVideoUrl = ''
+    let dashAudioUrl = ''
+    try {
+      if (data.dash?.video?.length) {
+        dashVideoUrl = data.dash.video[0].base_url || data.dash.video[0].baseUrl || ''
+      }
+      if (data.dash?.audio?.length) {
+        dashAudioUrl = data.dash.audio[0].base_url || data.dash.audio[0].baseUrl || ''
+      }
+    } catch {}
+
     return Response.json({
       success: true,
       data,
+      directUrl: durlUrl,
+      dashVideoUrl,
+      dashAudioUrl,
     }, {
       headers: {
         'Access-Control-Allow-Origin': '*',

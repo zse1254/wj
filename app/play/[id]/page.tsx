@@ -194,71 +194,128 @@ export default function PlayPage() {
       vsRef.current = items; ciRef.current = idx >= 0 ? idx : 0
     } else { setVids([]); vsRef.current = []; ciRef.current = -1 }
 
-    // 2. Check platform support
-    if (typeof window !== 'undefined' && !('MediaSource' in window)) {
-      setStatus('浏览器不支持，切换官方播放器...'); await fallback(bvid, page); return
-    }
-    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    if (isiOS) { setStatus('iOS 使用官方播放器...'); await fallback(bvid, page); return }
+    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
+    const isAndroid = /Android/i.test(navigator.userAgent)
+    const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
+    const isMobile = isiOS || isAndroid
 
-    // 3. Initialize dash.js with server-generated MPD
-    setStatus('加载 DASH 流...')
-    const mpdUrl = `/api/mpd/${bvid}?p=${page}`
+    // 2. Fetch playurl data (with durl for direct playback, cached in D1)
+    setStatus('获取播放源...')
+    const puRes = await fetch(`/api/playurl/${bvid}?p=${page}`).catch(() => null)
+    let directUrl = ''
+    if (puRes?.ok) {
+      const puJson = await puRes.json().catch(() => ({}))
+      directUrl = (puJson as any).directUrl || ''
+    }
 
     const video = videoRef.current
     if (!video) return
 
-    try {
+    // 3. Tier 1: Direct <video> playback (mobile + durl available)
+    // No Deno segment proxy needed, 1 Deno call total
+    if (directUrl && isMobile) {
+      setStatus('加载直链...')
       setUsingIframe(false)
       const old = video.parentElement?.querySelector('iframe'); if (old) old.remove()
       video.style.display = 'block'
 
-      const dashjs = await import('dashjs')
-      const player = dashjs.MediaPlayer().create()
-      playerRef.current = player
-      player.updateSettings({
-        streaming: {
-          abr: { autoSwitchBitrate: { video: false, audio: false } },
-          buffer: { fastSwitchEnabled: true },
-        },
-      })
-      player.initialize(video, mpdUrl, false)
-
-      let started = false
-
-      player.on('streamInitialized', () => setStatus(''))
-      player.on('playbackPlaying', () => { setStatus(''); started = true })
-      player.on('canPlay', () => setStatus(''))
-
-      player.on('error', async () => {
-        if (started) return
-        errRef.current++
-        if (errRef.current >= MAX_ERR) {
-          setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
+      // Simple event-based fallback
+      let loaded = false
+      const onError = () => {
+        if (loaded) return
+        video.removeEventListener('error', onError)
+        video.removeEventListener('loadeddata', onLoaded)
+        setStatus('直链失败，尝试 DASH...')
+        startDashPlay()
+      }
+      const onLoaded = () => {
+        loaded = true
+        setStatus('')
+        video.play().catch(() => {})
+      }
+      video.addEventListener('error', onError)
+      video.addEventListener('loadeddata', onLoaded)
+      video.src = directUrl
+      
+      // Timeout: after 8s no data, fallback to dash
+      setTimeout(() => {
+        if (!loaded) {
+          video.removeEventListener('error', onError)
+          video.removeEventListener('loadeddata', onLoaded)
+          setStatus('直链超时，尝试 DASH...')
+          startDashPlay()
         }
-      })
+      }, 8000)
 
-      player.on('playbackError', async () => {
-        if (started) return
-        errRef.current++
-        if (errRef.current >= MAX_ERR) {
-          setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
-        }
-      })
-
-      player.on('playbackEnded', () => {
-        if (!autoplayNext) return
-        const vs = vsRef.current; const ci = ciRef.current
-        if (vs.length > 1 && ci >= 0 && ci < vs.length - 1) {
-          playVid(vs[ci + 1].bvid, vs[ci + 1].page)
-        }
-      })
-
-    } catch (e: any) {
-      console.error('[dashjs]', e)
-      setStatus('播放器错误，切换备用方案...'); await fallback(bvid, page)
+      return
     }
-  }
+
+    // 4. Tier 2+3: dash.js → iframe fallback
+    startDashPlay()
+
+    async function startDashPlay() {
+      const v = videoRef.current
+      if (!v || !hasMSE || isiOS) {
+        setStatus('切换官方播放器...'); await fallback(bvid, page); return
+      }
+
+      setStatus('加载 DASH 流...')
+      setUsingIframe(false)
+      const old = v.parentElement?.querySelector('iframe'); if (old) old.remove()
+      v.style.display = 'block'
+
+      const mpdUrl = `/api/mpd/${bvid}?p=${page}`
+      errRef.current = 0
+
+      try {
+        const dashjs = await import('dashjs')
+        const player = dashjs.MediaPlayer().create()
+        playerRef.current = player
+        player.updateSettings({
+          streaming: {
+            abr: { autoSwitchBitrate: { video: false, audio: false } },
+            buffer: { fastSwitchEnabled: true },
+          },
+        })
+        player.initialize(v, mpdUrl, false)
+
+        let started = false
+
+        player.on('streamInitialized', () => setStatus(''))
+        player.on('playbackPlaying', () => { setStatus(''); started = true })
+        player.on('canPlay', () => setStatus(''))
+
+        player.on('error', async () => {
+          if (started) return
+          errRef.current++
+          if (errRef.current >= MAX_ERR) {
+            setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
+          }
+        })
+
+        player.on('playbackError', async () => {
+          if (started) return
+          errRef.current++
+          if (errRef.current >= MAX_ERR) {
+            setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
+          }
+        })
+
+        player.on('playbackEnded', () => {
+          if (!autoplayNext) return
+          const vs = vsRef.current; const ci = ciRef.current
+          if (vs.length > 1 && ci >= 0 && ci < vs.length - 1) {
+            playVid(vs[ci + 1].bvid, vs[ci + 1].page)
+          }
+        })
+
+      } catch (e: any) {
+        console.error('[dashjs]', e)
+        setStatus('播放器错误，切换备用方案...'); await fallback(bvid, page)
+      }
+    }
+
+    }
 
   function playVid(bvid: string, page: number) { return loadVideo(bvid, page) }
 
