@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { fetchPlayurl } from '@/lib/deno-proxy'
+import { getCachedPlayurl, loadAndCachePlayurl } from '@/lib/bvid-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,9 +40,10 @@ function escapeXml(s: string): string {
     .replace(/'/g, '\x26apos;')
 }
 
-function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string, useProxy = true): string {
+function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: string): string {
   const duration = data.video_duration || data.dash?.duration || 0
   const durStr = `PT${duration}S`
+
   let streams = (data.dash?.video || []).filter((v: any) => {
     const c = (v.codecs || '').toLowerCase()
     return c.startsWith('avc')
@@ -66,7 +67,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
-  const proxyBase = useProxy ? '/api/cdn-proxy?u=' : ''
+  const proxyBase = '/api/cdn-proxy?u='
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)
@@ -75,10 +76,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const h = v.height || 1080
     const bw = v.bandwidth || v.bandWidth || 1000000
     const rawUrl = getUrl(v, cdnParam)
-    const segmentUrl = useProxy ? proxyBase + encodeURIComponent(rawUrl) : rawUrl
+    const segUrl = proxyBase + encodeURIComponent(rawUrl)
     return `
     <Representation id="v-${v.id || i}-${i}" mimeType="video/mp4" bandwidth="${bw}" width="${w}" height="${h}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(segmentUrl)}</BaseURL>
+      <BaseURL>${escapeXml(segUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -90,10 +91,10 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     const codecs = a.codecs || 'mp4a.40.2'
     const bw = a.bandwidth || a.bandWidth || 128000
     const rawUrl = getUrl(a, cdnParam)
-    const segmentUrl = useProxy ? proxyBase + encodeURIComponent(rawUrl) : rawUrl
+    const segUrl = proxyBase + encodeURIComponent(rawUrl)
     return `
     <Representation id="a-${a.id || i}-${i}" mimeType="audio/mp4" bandwidth="${bw}" codecs="${escapeXml(codecs)}">
-      <BaseURL>${escapeXml(segmentUrl)}</BaseURL>
+      <BaseURL>${escapeXml(segUrl)}</BaseURL>
       <SegmentBase indexRange="${sb.index}">
         <Initialization range="${sb.init}"/>
       </SegmentBase>
@@ -102,15 +103,12 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
 
   return `<?xml version="1.0" encoding="utf-8"?>
 <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" profiles="urn:mpeg:dash:profile:isoff-on-demand:2011" type="static" mediaPresentationDuration="${durStr}" minBufferTime="PT1.500S">
-  <Period id="1" start="PT0S">
-    <AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">
-      ${videoReps}
-    </AdaptationSet>
-    <AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">
-      ${audioReps}
-    </AdaptationSet>
-  </Period>
-</MPD>`
+<Period id="1" start="PT0S">
+<AdaptationSet id="1" contentType="video" segmentAlignment="true" bitstreamSwitching="true">
+${videoReps}</AdaptationSet>
+<AdaptationSet id="2" contentType="audio" segmentAlignment="true" bitstreamSwitching="true">
+${audioReps}</AdaptationSet>
+</Period></MPD>`
 }
 
 export async function GET(
@@ -120,70 +118,61 @@ export async function GET(
   try {
     const { bvid } = await context.params
     if (!/^BV[a-zA-Z0-9]+$/.test(bvid)) {
-      return new Response('Invalid bvid', { status: 400, headers: { 'Content-Type': 'text/plain' } })
+      return new Response('Invalid bvid', { status: 400 })
     }
+
     const cdnParam = request.nextUrl.searchParams.get('cdn') || '0'
     const qnParam = request.nextUrl.searchParams.get('qn') || 'all'
     const audioParam = request.nextUrl.searchParams.get('audio') || 'all'
-    const pageParam = parseInt(request.nextUrl.searchParams.get('p') || '0', 10)
-    const format = request.nextUrl.searchParams.get('format') || 'mpd'
-    const useProxy = request.nextUrl.searchParams.get('proxy') !== '0'
+    const page = parseInt(request.nextUrl.searchParams.get('p') || '1', 10)
 
+    // Get cid for multi-page
     let cid: number | undefined
-    if (pageParam > 1) {
+    if (page > 1) {
       try {
         const infoRes = await fetch(`${request.nextUrl.origin}/api/bvid/${bvid}`)
         if (infoRes.ok) {
           const infoJson = await infoRes.json()
           if (infoJson.success && infoJson.data?.pages?.length) {
-            const page = infoJson.data.pages.find((p: { page: number; cid: number }) => p.page === pageParam)
-            if (page?.cid) cid = page.cid
+            const pg = infoJson.data.pages.find((p: { page: number; cid: number }) => p.page === page)
+            if (pg?.cid) cid = pg.cid
           }
         }
       } catch {}
     }
 
-    let data: any = null
-    try {
-      data = await fetchPlayurl(bvid, cid || undefined, 80)
-    } catch (err: any) {
-      console.error('[mpd/bvid] playurl error:', err.message)
+    // 1. Check D1 cache first (saves Deno quota)
+    let data = await getCachedPlayurl(bvid, page)
+    if (!data) {
+      // 2. Cache miss → fetch from Deno → save to D1
+      try {
+        data = await loadAndCachePlayurl(bvid, cid, 80, page)
+      } catch (err: any) {
+        console.error('[mpd/bvid] playurl error:', err.message)
+        return new Response('Failed to fetch from Bilibili', { status: 502 })
+      }
     }
 
-    if (!data || !data.dash) {
-      return new Response('Failed to fetch DASH stream from Bilibili', { status: 502, headers: { 'Content-Type': 'text/plain' } })
+    if (!data?.dash) {
+      return new Response('No DASH data', { status: 502 })
     }
 
-    if (format === 'json') {
-      const cdnUrls: any[] = []
+    // For host:xxx CDN format, replace ALL stream baseUrls
+    if (cdnParam.startsWith('host:')) {
+      const host = cdnParam.slice(5)
       for (const v of (data.dash?.video || [])) {
-        const sb = getSegmentBase(v)
-        cdnUrls.push({
-          type: 'video', id: v.id, codecs: v.codecs, width: v.width, height: v.height,
-          bandwidth: v.bandwidth || v.bandWidth, baseUrl: getUrl(v, cdnParam),
-          backupUrls: (v.backupUrl || v.backup_url || []).map((u: string) => getUrl({ base_url: u }, cdnParam)),
-          initRange: sb.init, indexRange: sb.index,
-        })
+        if (v.base_url) v.base_url = replaceHost(v.base_url, host)
+        if (v.baseUrl) v.baseUrl = replaceHost(v.baseUrl, host)
+        if (v.backup_url) v.backup_url = v.backup_url.map((u: string) => replaceHost(u, host))
+        if (v.backupUrl) v.backupUrl = v.backupUrl.map((u: string) => replaceHost(u, host))
       }
       for (const a of (data.dash?.audio || [])) {
-        const sb = getSegmentBase(a)
-        cdnUrls.push({
-          type: 'audio', id: a.id, codecs: a.codecs, bandwidth: a.bandwidth || a.bandWidth,
-          baseUrl: getUrl(a, cdnParam),
-          backupUrls: (a.backupUrl || a.backup_url || []).map((u: string) => getUrl({ base_url: u }, cdnParam)),
-          initRange: sb.init, indexRange: sb.index,
-        })
+        if (a.base_url) a.base_url = replaceHost(a.base_url, host)
+        if (a.baseUrl) a.baseUrl = replaceHost(a.baseUrl, host)
       }
-      return new Response(JSON.stringify({
-        success: true,
-        data: { duration: data.dash?.duration || data.video_duration || 0, streams: cdnUrls },
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' },
-      })
     }
 
-    const mpd = buildMpd(data, cdnParam, qnParam, audioParam, useProxy)
+    const mpd = buildMpd(data, cdnParam, qnParam, audioParam)
 
     return new Response(mpd, {
       status: 200,
@@ -195,6 +184,6 @@ export async function GET(
     })
   } catch (err: any) {
     console.error('[mpd/bvid] error:', err)
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 })
   }
 }
