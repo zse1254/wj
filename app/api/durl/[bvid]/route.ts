@@ -49,15 +49,16 @@ export async function GET(
       return new Response('No durl available', { status: 502 })
     }
 
-    // Pick main URL or backup_url[0]
+    // Pick main URL or backup_url, rotating by `i` (CDN 换源，0 额外 Deno 请求)
+    const i = Math.max(0, parseInt(request.nextUrl.searchParams.get('i') || '0', 10) || 0)
     const first = data.durl[0]
-    let mp4Url = first.url || ''
-    if (!mp4Url && first.backup_url && Array.isArray(first.backup_url) && first.backup_url.length) {
-      mp4Url = first.backup_url[0]
-    }
-    if (!mp4Url) {
+    const candidates: string[] = []
+    if (first.url) candidates.push(first.url)
+    if (Array.isArray(first.backup_url)) candidates.push(...first.backup_url.filter(Boolean))
+    if (!candidates.length) {
       return new Response('No mp4 url', { status: 502 })
     }
+    const mp4Url = candidates[i % candidates.length]
 
     // 2. 302 → Deno /proxy?u=mp4 (Deno 加 Referer 转发，浏览器直接流式播放)
     const proxy = DENO_PROXIES[Math.floor(Math.random() * DENO_PROXIES.length)]

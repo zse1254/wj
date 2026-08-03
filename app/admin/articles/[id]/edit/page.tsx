@@ -20,8 +20,28 @@ export default function EditArticlePage() {
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
   const [refreshMsg, setRefreshMsg] = useState('')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
-  const [directLinks, setDirectLinks] = useState<{ video: { id: number; url: string; backup: string[]; codecs: string; width: number; height: number }[]; audio: { id: number; url: string; backup: string[]; codecs: string }[] } | null>(null)
-  const [fetchingLinks, setFetchingLinks] = useState(false)
+
+  // 本地生成完整 mp4 直链（0 Deno 请求，复制即播放）——直接在渲染时计算，跟随表单实时更新
+  const buildDirectLinks = useCallback((bilibili_url: string, type: string, content: string): { label: string; url: string }[] => {
+    const bv = bilibili_url?.match(/BV[a-zA-Z0-9]+/)?.[0]
+    if (!bv || (type !== 'video' && type !== 'series')) return []
+    if (type === 'series') {
+      try {
+        const parsed = JSON.parse(content)
+        const videos = Array.isArray(parsed?.videos) ? parsed.videos : []
+        if (videos.length) {
+          return videos.map((v: any, i: number) => ({
+            label: v.title || `第${v.page || i + 1}集`,
+            url: `/api/durl/${v.bvid || bv}?p=${v.page || 1}`,
+          }))
+        }
+      } catch {}
+      return [{ label: '单集', url: `/api/durl/${bv}?p=1` }]
+    }
+    return [{ label: '完整视频', url: `/api/durl/${bv}?p=1` }]
+  }, [])
+
+  const directLinks = buildDirectLinks(form.bilibili_url, form.type, form.content)
 
   useEffect(() => {
     Promise.all([
@@ -46,19 +66,6 @@ export default function EditArticlePage() {
               setSeriesInfo({ title: a.title || parsed.title || '', videos: parsed.videos })
             }
           } catch {}
-        }
-        // 自动获取直链
-        if ((a.type === 'video' || a.type === 'series') && a.bilibili_url) {
-          const bv = a.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0]
-          if (bv) {
-            setFetchingLinks(true)
-            fetch('/api/admin/direct-links', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bvid: bv, page: 1 }),
-            }).then(r => r.json()).then(lj => {
-              if (lj.success) setDirectLinks(lj.data)
-            }).finally(() => setFetchingLinks(false))
-          }
         }
       }
     }).finally(() => setLoading(false))
@@ -405,30 +412,34 @@ export default function EditArticlePage() {
                 复制
               </button>
             </div>
-            {fetchingLinks && !directLinks && <p className="text-xs text-gray-500">正在获取 CDN 直链...</p>}
-            {directLinks && (
+            {directLinks.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500">CDN 视频直链</p>
-                {directLinks.video.slice(0, 3).map((v, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">{v.height}p</span>
-                    <input type="text" readOnly value={v.url}
-                      className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
-                    <button type="button" onClick={() => navigator.clipboard.writeText(v.url).then(() => alert('已复制'))}
-                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
-                  </div>
-                ))}
-                <p className="text-xs font-medium text-gray-500 mt-1">CDN 音频直链</p>
-                {directLinks.audio.slice(0, 2).map((a, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400 w-14 shrink-0">{a.codecs.split('.')[0]}</span>
-                    <input type="text" readOnly value={a.url}
-                      className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
-                    <button type="button" onClick={() => navigator.clipboard.writeText(a.url).then(() => alert('已复制'))}
-                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
-                  </div>
-                ))}
+                <p className="text-xs font-medium text-gray-500">
+                  完整 mp4 直链{form.type === 'series' && directLinks.length > 1 ? `（共 ${directLinks.length} 集，每集按需生成，不消耗额度）` : '（点击复制，浏览器直接打开即可播放）'}
+                </p>
+                <div className="max-h-56 overflow-y-auto space-y-1">
+                  {directLinks.map((l, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400 w-24 shrink-0 truncate">{l.label}</span>
+                      <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${l.url}`}
+                        className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
+                      <button type="button" onClick={() => {
+                        const url = `${window.location.origin}${l.url}`
+                        navigator.clipboard.writeText(url).then(() => alert('已复制，浏览器打开即可播放')).catch(() => alert('复制失败'))
+                      }}
+                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
+                      <button type="button" onClick={() => window.open(l.url, '_blank')}
+                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 shrink-0">预览</button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  直链为完整 mp4（360p 免登录），每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。
+                </p>
               </div>
+            )}
+            {directLinks.length === 0 && form.bilibili_url && (
+              <p className="text-xs text-gray-500">无法生成直链：未识别到 BV 号</p>
             )}
             {refreshMsg && (
               <div className="mt-1 p-2 bg-white border rounded text-xs font-mono break-all whitespace-pre-wrap">

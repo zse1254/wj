@@ -37,6 +37,7 @@ export default function PlayPage() {
   const playerRef = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const errRef = useRef(0)
+  const retryRef = useRef(0)
   const bvidRef = useRef('')
   const pageRef = useRef(1)
   const vsRef = useRef<SeriesVid[]>([])
@@ -44,7 +45,6 @@ export default function PlayPage() {
   const MAX_ERR = 5
 
   const [status, setStatus] = useState('加载中...')
-  const [usingIframe, setUsingIframe] = useState(false)
   const [vids, setVids] = useState<SeriesVid[]>([])
   const [seriesTitle, setSeriesTitle] = useState('')
   const [curIdx, setCurIdx] = useState(-1)
@@ -83,56 +83,7 @@ export default function PlayPage() {
     if (playerRef.current) { try { playerRef.current.reset() } catch {}; playerRef.current = null }
     const v = videoRef.current; if (v) { try { v.removeAttribute('src'); v.load() } catch {} }
     errRef.current = 0
-  }
-
-  async function fallback(bvid: string, page: number) {
-    destroy(); setUsingIframe(true); setStatus('')
-    const v = videoRef.current; if (!v) return
-    const c = v.parentElement; if (!c) return
-    v.style.display = 'none'
-    const old = c.querySelector('iframe'); if (old) old.remove()
-    const iframe = document.createElement('iframe')
-    iframe.src = `https://player.bilibili.com/player.html?bvid=${bvid}&page=${page || 1}&high_quality=1&autoplay=1`
-    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none'
-    iframe.setAttribute('allowFullScreen', 'false')
-    iframe.setAttribute('frameborder', '0')
-    iframe.setAttribute('scrolling', 'no')
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
-    iframe.setAttribute('allow', 'autoplay; encrypted-media')
-    // Block all clicks on iframe that would navigate
-    iframe.addEventListener('load', () => {
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document
-        if (doc) {
-          doc.addEventListener('click', (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            const target = e.target as HTMLElement
-            const link = target.closest('a')
-            if (link) {
-              link.removeAttribute('href')
-              link.style.pointerEvents = 'none'
-            }
-          }, true)
-        }
-      } catch {}
-      // Fallback: overlay div to block all iframe clicks
-      const overlay = document.createElement('div')
-      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;background:transparent;cursor:default'
-      overlay.addEventListener('click', (e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        e.stopImmediatePropagation()
-        return false
-      })
-      const parent = iframe.parentElement
-      if (parent) {
-        parent.appendChild(overlay)
-        // Push overlay behind controls but over iframe
-        setTimeout(() => overlay.style.zIndex = '1', 500)
-      }
-    })
-    c.appendChild(iframe)
+    retryRef.current = 0
   }
 
   async function load() {
@@ -203,7 +154,6 @@ export default function PlayPage() {
     // 1. 默认：durl mp4（完整 mp4，任意浏览器原生可播，无B站痕迹，1次Deno请求/视频）
     // 仅 360p（B站匿名 durl 限制），但省额度（相比 dash.js 省99%）
     setStatus('加载视频...')
-    setUsingIframe(false)
     if (video) {
       const oldIframe = video.parentElement?.querySelector('iframe'); if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
@@ -216,7 +166,7 @@ export default function PlayPage() {
     const mp4Timeout = setTimeout(() => {
       if (!video || mp4Failed) return
       mp4Failed = true
-      setStatus('直链超时，尝试高清...')
+      setStatus('直链超时，尝试其他节点...')
       startDashPlay()
     }, 10000)
 
@@ -224,7 +174,7 @@ export default function PlayPage() {
       if (mp4Failed) return
       mp4Failed = true
       clearTimeout(mp4Timeout)
-      setStatus('直链失败，尝试高清...')
+      setStatus('直链失败，尝试其他节点...')
       await startDashPlay()
     }
     const mp4LoadHandler = () => {
@@ -242,57 +192,57 @@ export default function PlayPage() {
       video.load()
     }
 
-    // 高清（桌面，dash.js 720p）或 mp4 失败兜底
+    // 手机/无MSE：durl 失败 → 轮换 CDN 节点重试，绝不再跳官方 iframe
+    async function retryDurl() {
+      const v = videoRef.current
+      if (!v) return
+      retryRef.current++
+      if (retryRef.current >= MAX_ERR) {
+        setStatus('直链播放失败，请稍后重试')
+        return
+      }
+      mp4Failed = false
+      v.removeEventListener('error', mp4ErrorHandler)
+      v.removeEventListener('loadeddata', mp4LoadHandler)
+      v.src = `/api/durl/${bvid}?p=${page}&i=${retryRef.current}`
+      v.load()
+      v.addEventListener('error', mp4ErrorHandler)
+      v.addEventListener('loadeddata', mp4LoadHandler)
+      v.play().catch(() => {})
+    }
+
+    // 桌面端 durl 失败 → dash.js 高清（720p）兜底，失败也只换节点不再跳 iframe
     async function startDashPlay() {
       const v = videoRef.current
       const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
       if (!v || !hasMSE || isMobile) {
-        // 手机或无MSE：直接 iframe
-        setStatus('切换播放器...'); await fallback(bvid, page); return
+        await retryDurl(); return
       }
-
       setStatus('加载高清流...')
-      setUsingIframe(false)
-      const old = v.parentElement?.querySelector('iframe'); if (old) old.remove()
-      v.style.display = 'block'
-
-      const mpdUrl = `/api/mpd/${bvid}?p=${page}`
       errRef.current = 0
-
+      const mpdUrl = `/api/mpd/${bvid}?p=${page}`
       try {
         const dashjs = await import('dashjs')
         const player = dashjs.MediaPlayer().create()
         playerRef.current = player
         player.updateSettings({
-          streaming: {
-            abr: { autoSwitchBitrate: { video: false, audio: false } },
-            buffer: { fastSwitchEnabled: true },
-          },
+          streaming: { abr: { autoSwitchBitrate: { video: false, audio: false } }, buffer: { fastSwitchEnabled: true } },
         })
         player.initialize(v, mpdUrl, false)
-
         let started = false
-
         player.on('streamInitialized', () => setStatus(''))
         player.on('playbackPlaying', () => { setStatus(''); started = true })
         player.on('canPlay', () => setStatus(''))
-
         player.on('error', async () => {
           if (started) return
           errRef.current++
-          if (errRef.current >= MAX_ERR) {
-            setStatus('播放失败，切换播放器...'); await fallback(bvid, page)
-          }
+          if (errRef.current >= MAX_ERR) { await retryDurl() }
         })
-
         player.on('playbackError', async () => {
           if (started) return
           errRef.current++
-          if (errRef.current >= MAX_ERR) {
-            setStatus('播放失败，切换播放器...'); await fallback(bvid, page)
-          }
+          if (errRef.current >= MAX_ERR) { await retryDurl() }
         })
-
         player.on('playbackEnded', () => {
           if (!autoplayNext) return
           const vs = vsRef.current; const ci = ciRef.current
@@ -300,10 +250,9 @@ export default function PlayPage() {
             playVid(vs[ci + 1].bvid, vs[ci + 1].page)
           }
         })
-
       } catch (e: any) {
         console.error('[dashjs]', e)
-        setStatus('播放器错误，切换播放器...'); await fallback(bvid, page)
+        await retryDurl()
       }
     }
     }
@@ -358,55 +307,53 @@ export default function PlayPage() {
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#000', touchAction: 'manipulation', overflow: 'hidden' }}>
       <video ref={videoRef} controls playsInline
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: usingIframe ? 'none' : 'block', background: '#000' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'contain', display: 'block', background: '#000' }}
       />
-      {!usingIframe && (
-        <div style={panel}>
-          {vids.length > 1 && (
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setSeriesOpen(o => !o)} style={{ ...btn, background: seriesOpen ? 'rgba(251,114,153,.3)' : 'rgba(0,0,0,.7)' }} data-menu>
-                剧集 ({vids.length})
-              </button>
-              {seriesOpen && (
-                <div style={{ ...menu, minWidth: 280 }} data-menu>
-                  <div style={{ padding: '8px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid rgba(255,255,255,.1)', fontFamily: 'sans-serif' }}>
-                    {seriesTitle} ({vids.length}集)
-                  </div>
-                  {vids.map((v, i) => (
-                    <div key={i} onClick={() => switchEpisode(i)} style={{ display: 'flex', padding: '6px 8px', fontFamily: 'sans-serif', fontSize: 13, color: i === curIdx ? '#4fc3f7' : '#ccc', background: i === curIdx ? 'rgba(79,195,247,.12)' : 'transparent', borderBottom: '1px solid rgba(255,255,255,.05)', cursor: 'pointer', gap: 8, alignItems: 'flex-start' }}>
-                      {v.cover_url ? (
-                        <img src={v.cover_url} alt="" loading="lazy" style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 3, flexShrink: 0, background: '#222' }} />
-                      ) : (
-                        <div style={{ width: 56, height: 36, background: '#222', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#444' }}>{i + 1}</div>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{i + 1}. {v.title || `第${i + 1}集`}</div>
-                        {v.duration ? <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{Math.floor(v.duration / 60)}:{String(v.duration % 60).padStart(2, '0')}</div> : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {vids.length > 1 && (
-            <button onClick={() => setAutoplayNext(v => !v)} style={{ ...btn, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}>
-              {autoplayNext ? '连播' : '不连播'}
+      <div style={panel}>
+        {vids.length > 1 && (
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setSeriesOpen(o => !o)} style={{ ...btn, background: seriesOpen ? 'rgba(251,114,153,.3)' : 'rgba(0,0,0,.7)' }} data-menu>
+              剧集 ({vids.length})
             </button>
-          )}
-          <div style={{ position: 'relative' }} data-menu>
-            <button onClick={() => setMenuOpen(o => o === 'cdn' ? '' : 'cdn')} style={btn}>换源 ▾</button>
-            {menuOpen === 'cdn' && (
-              <div style={menu} data-menu>
-                {CDN_HOSTS.map(h => (
-                  <div key={h.host} onClick={() => switchCdn(h)} style={item(false)}>{h.label}</div>
+            {seriesOpen && (
+              <div style={{ ...menu, minWidth: 280 }} data-menu>
+                <div style={{ padding: '8px 12px', fontSize: 12, color: '#888', borderBottom: '1px solid rgba(255,255,255,.1)', fontFamily: 'sans-serif' }}>
+                  {seriesTitle} ({vids.length}集)
+                </div>
+                {vids.map((v, i) => (
+                  <div key={i} onClick={() => switchEpisode(i)} style={{ display: 'flex', padding: '6px 8px', fontFamily: 'sans-serif', fontSize: 13, color: i === curIdx ? '#4fc3f7' : '#ccc', background: i === curIdx ? 'rgba(79,195,247,.12)' : 'transparent', borderBottom: '1px solid rgba(255,255,255,.05)', cursor: 'pointer', gap: 8, alignItems: 'flex-start' }}>
+                    {v.cover_url ? (
+                      <img src={v.cover_url} alt="" loading="lazy" style={{ width: 56, height: 36, objectFit: 'cover', borderRadius: 3, flexShrink: 0, background: '#222' }} />
+                    ) : (
+                      <div style={{ width: 56, height: 36, background: '#222', borderRadius: 3, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#444' }}>{i + 1}</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.3 }}>{i + 1}. {v.title || `第${i + 1}集`}</div>
+                      {v.duration ? <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{Math.floor(v.duration / 60)}:{String(v.duration % 60).padStart(2, '0')}</div> : null}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </div>
-          <button onClick={() => videoRef.current?.requestFullscreen?.().catch(() => {})} style={btn}>全屏</button>
+        )}
+        {vids.length > 1 && (
+          <button onClick={() => setAutoplayNext(v => !v)} style={{ ...btn, background: autoplayNext ? 'rgba(76,175,80,.3)' : 'rgba(0,0,0,.7)', color: autoplayNext ? '#81c784' : '#fff' }}>
+            {autoplayNext ? '连播' : '不连播'}
+          </button>
+        )}
+        <div style={{ position: 'relative' }} data-menu>
+          <button onClick={() => setMenuOpen(o => o === 'cdn' ? '' : 'cdn')} style={btn}>换源 ▾</button>
+          {menuOpen === 'cdn' && (
+            <div style={menu} data-menu>
+              {CDN_HOSTS.map(h => (
+                <div key={h.host} onClick={() => switchCdn(h)} style={item(false)}>{h.label}</div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+        <button onClick={() => videoRef.current?.requestFullscreen?.().catch(() => {})} style={btn}>全屏</button>
+      </div>
       {status && (
         <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)', padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap' }}>
           {status}

@@ -139,3 +139,44 @@ https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/.../...-1-30280.m4s
 | 番剧 PGC | pgc API | ⏳ 待加 |
 | 评论 | relation API | ⏳ 待加 |
 <!-- END:bilibili-streaming-notes -->
+
+<!-- BEGIN:direct-link-requirements -->
+# 直链功能需求（2026-08 用户明确澄清，重要！）
+
+## 站点结构（不要搞混）
+
+**两套完全独立的视频观看方式：**
+
+1. **主页播放 = B站官方播放器（iframe）** —— `/play/[id]` 等主页内容用官方播放器，**已经工作正常，不要动**
+2. **后台生成的直链 = 完全去B站化的独立链接** —— 这是当前要做的重点
+
+## 直链功能（当前任务）
+
+后台管理（添加/编辑文章）时，**能生成直链链接**。这个直链：
+- 完全去 B站 痕迹（无 iframe、无B站logo、无官方播放器）
+- 合集和单个视频都能播放（单个 + 合集每集）
+- 电脑 + 手机都能播放
+- 跟网站主页内容无关（独立的链接，直接打开就是视频）
+- 基于 PiliPalaX APK 逆向的直链方法，有**很多 CDN 加速节点**
+
+## 现有相关代码
+
+- 后台"刷新直链"按钮 → `/api/admin/articles/[id]/refresh-stream` 存 playurl 到 `stream_data`
+- 后台 direct-links → `/api/admin/direct-links` 生成 DASH 分离 m4s 直链
+- 播放直链端点 → `/api/stream/[id]`（返回 MPD）、`/api/durl/[bvid]`（完整mp4 302转发）
+- 播放页 → `app/play/[id]/page.tsx`（现在会 fallback 到官方 iframe，手机端）
+
+## 当前卡点
+
+- **代理额度**：dash.js 每视频 100-300 次 Deno 请求烧额度。durl mp4 每视频 1-2 次（已实现 `/api/durl`，但只有 360p）
+- Deno 免费额度 1万（绑卡100万），CF Pages IP 被 B站 API 封 412，CDN 也 403
+- 目标：**省代理额度 + 满足直链观看需求**
+
+## 环境事实（已实测确认）
+
+- B站 API `fnval=0` → durl（完整mp4，仅360p匿名）；`fnval=16/4048` → dash（分离流，720p匿名）
+- B站 CDN `bilivideo.com` 要求 `Referer: https://www.bilibili.com/`，浏览器跨域做不到
+- 浏览器 `<video>` 播 mp4 不需要 CORS，但需要 Referer 正确
+- CF Pages IP：B站 API 412、CDN 403（都不能直连）
+- Deno Deploy IP：可用（能调 API + 转发 CDN）
+<!-- END:direct-link-requirements -->
