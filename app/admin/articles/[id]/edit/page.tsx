@@ -433,11 +433,11 @@ export default function EditArticlePage() {
 
             <div className="flex items-center gap-3 pt-1 border-t border-green-200">
               <span className="text-green-700 font-medium shrink-0">网页播放页</span>
-              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
+              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=2`}
                 className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
               <button type="button" onClick={() => {
-                const url = `${window.location.origin}/play/${params.id}`
-                navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
+                const url = `${window.location.origin}/play/${params.id}?v=2`
+                navigator.clipboard.writeText(url).then(() => alert('已复制（新链接已绕过旧版缓存）')).catch(() => alert('复制失败'))
               }}
                 className="px-3 py-1 bg-white text-green-700 border border-green-300 rounded hover:bg-green-50 text-xs shrink-0">
                 复制

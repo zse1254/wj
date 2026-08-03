@@ -23,7 +23,7 @@ export default function SeriesDetailPage() {
   const [videos, setVideos] = useState<SeriesVideo[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [played, setPlayed] = useState(0)
-  const [autoplay, setAutoplay] = useState(true)
+  const [autoplay, setAutoplay] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const requestedBvidsRef = useRef<Set<string>>(new Set())
@@ -263,9 +263,6 @@ export default function SeriesDetailPage() {
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
-  const currentEmbedUrl = currentBvid
-    ? `https://player.bilibili.com/player.html?bvid=${currentBvid}&p=${currentPage}&high_quality=1&autoplay=1&danmaku=0`
-    : ''
 
   useEffect(() => {
     if (!autoplay || !currentVideo) {
@@ -358,14 +355,12 @@ export default function SeriesDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
               <iframe
-                key={currentBvid}
-                src={currentEmbedUrl}
-                  scrolling="no"
-                  frameBorder="0"
-                  allowFullScreen
-                  allow="autoplay"
-                  referrerPolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin"
+                key={`play-${article.id}-${currentIndex}`}
+                src={`/play/${article.id}?p=${currentPage}`}
+                allowFullScreen
+                allow="autoplay"
+                referrerPolicy="no-referrer"
+                sandbox="allow-scripts allow-same-origin"
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -377,41 +372,15 @@ export default function SeriesDetailPage() {
               />
             </div>
 
-            <div className="flex items-center gap-3 mb-4">
-              <button onClick={playPrev} disabled={currentIndex === 0}
-                className="px-4 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
-                上一集
-              </button>
-              <span className="text-sm text-gray-500">
-                {currentIndex + 1} / {videos.length}
-              </span>
-              <button onClick={playNext} disabled={currentIndex >= videos.length - 1 || !currentVideo}
-                className="px-4 py-1.5 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
-                下一集
-              </button>
-              <label className="flex items-center gap-1.5 text-sm text-gray-500 ml-auto cursor-pointer">
-                <input type="checkbox" checked={autoplay} onChange={e => setAutoplay(e.target.checked)} />
-                本集播完自动连播
-              </label>
-              {autoplay && remaining != null && (
-                <button onClick={() => setAutoplay(false)}
-                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500 ml-2">
-                  取消连播
-                </button>
-              )}
-            </div>
-
-            {autoplay && remaining != null && (
-              <p className="text-xs text-amber-600 mb-4">
-                本集约 <span className="font-semibold">{remaining}</span> 秒后自动连播下一集{remaining <= 8 ? '…' : ''}（如需暂停视频请用播放器控件）
-              </p>
-            )}
-
             {currentVideo && (
-              <>
-                <h2 className="font-semibold text-base mb-1">{currentVideo.title}</h2>
-                {article.summary && <p className="text-sm text-gray-600 mb-4">{article.summary}</p>}
-              </>
+              <div className="mb-4">
+                <h2 className="font-semibold text-base mb-1">
+                  {currentIndex + 1}. {currentVideo.title}
+                </h2>
+                <p className="text-xs text-gray-400">
+                  {currentIndex + 1} / {videos.length} 集，播放器内可选集、自动连播
+                </p>
+              </div>
             )}
           </div>
 

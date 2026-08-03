@@ -41,7 +41,15 @@ export default function VideoDetailPage() {
   const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
   function renderPlayer(a: Article) {
-    if (a.has_stream) {
+    // 合集（多集）统一走去B站化播放页，支持选集+自动连播
+    let isSeries = false
+    try {
+      const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content
+      const list = Array.isArray(content) ? content : content?.videos
+      if (Array.isArray(list) && list.length > 1) isSeries = true
+    } catch {}
+
+    if (a.has_stream || isSeries) {
       return (
         <iframe
           src={`/play/${articleId}`}
