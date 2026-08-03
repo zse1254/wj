@@ -50,6 +50,8 @@ export async function GET(
     }
 
     // Pick main URL or backup_url, rotating by `i` (CDN 换源，0 额外 Deno 请求)
+    // 源已由 loadAndCachePlayurl 探测重排：健康源在最前（i=0 即健康源），
+    // 坏源被排到 backup 尾部，直接打开直链也始终能播。
     const i = Math.max(0, parseInt(request.nextUrl.searchParams.get('i') || '0', 10) || 0)
     const first = data.durl[0]
     const candidates: string[] = []
