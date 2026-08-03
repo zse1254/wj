@@ -42,6 +42,7 @@ export default function PlayPage() {
   const pageRef = useRef(1)
   const vsRef = useRef<SeriesVid[]>([])
   const ciRef = useRef(-1)
+  const autoplayNextRef = useRef(true)
   const MAX_ERR = 5
 
   const [status, setStatus] = useState('加载中...')
@@ -52,8 +53,11 @@ export default function PlayPage() {
   const [autoplayNext, setAutoplayNext] = useState(true)
   const [menuOpen, setMenuOpen] = useState('')
 
+  const isMobileUA = typeof navigator !== 'undefined' && /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
+
   useEffect(() => { vsRef.current = vids }, [vids])
   useEffect(() => { ciRef.current = curIdx }, [curIdx])
+  useEffect(() => { autoplayNextRef.current = autoplayNext }, [autoplayNext])
 
   useEffect(() => {
     document.title = 'Video Player'
@@ -74,6 +78,21 @@ export default function PlayPage() {
   }, [])
 
   useEffect(() => { load() }, [params.id, sp])
+
+  // 原生 <video> 播完（手机 durl mp4 / CDN 换源后）自动连播下一集
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v) return
+    const handleEnded = () => {
+      if (!autoplayNextRef.current) return
+      const vs = vsRef.current; const ci = ciRef.current
+      if (vs.length > 1 && ci >= 0 && ci < vs.length - 1) {
+        playVid(vs[ci + 1].bvid, vs[ci + 1].page)
+      }
+    }
+    v.addEventListener('ended', handleEnded)
+    return () => v.removeEventListener('ended', handleEnded)
+  }, [])
 
   function getCurPage(): number {
     const p = parseInt(sp.get('p') || '1', 10); return p > 0 ? p : 1
@@ -143,7 +162,14 @@ export default function PlayPage() {
       const idx = items.findIndex((v: SeriesVid) => v.page === page)
       setCurIdx(idx >= 0 ? idx : 0)
       vsRef.current = items; ciRef.current = idx >= 0 ? idx : 0
-    } else { setVids([]); vsRef.current = []; ciRef.current = -1 }
+    } else if (vsRef.current.length === 0) {
+      setVids([]); vsRef.current = []; ciRef.current = -1
+    } else {
+      // 已从 article.content 解析出合集列表，保留不动
+      const idx = vsRef.current.findIndex((v: SeriesVid) => v.page === page)
+      setCurIdx(idx >= 0 ? idx : 0)
+      ciRef.current = idx >= 0 ? idx : 0
+    }
 
     const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     const isAndroid = /Android/i.test(navigator.userAgent)
@@ -357,6 +383,24 @@ export default function PlayPage() {
       {status && (
         <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)', padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap' }}>
           {status}
+        </div>
+      )}
+      {/* 手机端：底部常驻剧集横条，点选即播 */}
+      {vids.length > 1 && isMobileUA && (
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 11, background: 'rgba(0,0,0,.85)', padding: '8px 0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ paddingLeft: 12, fontFamily: 'sans-serif', fontSize: 12, color: '#ff6b8a', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {curIdx + 1}/{vids.length}
+          </div>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', paddingRight: 12 }}>
+            {vids.map((v, i) => (
+              <div key={i} onClick={() => switchEpisode(i)} style={{
+                minWidth: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 8, fontFamily: 'sans-serif', fontSize: 14, cursor: 'pointer', flexShrink: 0,
+                background: i === curIdx ? 'rgba(251,114,153,.35)' : 'rgba(255,255,255,.12)',
+                color: i === curIdx ? '#fff' : 'rgba(255,255,255,.7)', border: i === curIdx ? '1px solid #ff6b8a' : '1px solid rgba(255,255,255,.15)',
+              }}>{i + 1}</div>
+            ))}
+          </div>
         </div>
       )}
     </div>
