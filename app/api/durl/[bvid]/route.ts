@@ -62,9 +62,16 @@ export async function GET(
     }
     const mp4Url = candidates[i % candidates.length]
 
-    // 2. 302 → Deno /proxy?u=mp4 (Deno 加 Referer 转发，浏览器直接流式播放)
+    // 2. 默认 302 → Deno /proxy?u=mp4 (Deno 加 Referer 转发，浏览器直接流式播放)
+    // 但注意：浏览器 <video> 请求跨域 302 时会剥离 Range 头，导致 Deno 无法按字节区间返回。
+    // 所以播放页应使用 ?json=1 拿到直连 URL 后直接设置 video.src（不经 302），保证 Range 正常。
     const proxy = DENO_PROXIES[Math.floor(Math.random() * DENO_PROXIES.length)]
     const streamUrl = `${proxy}/proxy?u=${encodeURIComponent(mp4Url)}`
+
+    // ?json=1: 返回直连 URL（播放页 <video> 使用，避免跨域 302 丢 Range）
+    if (request.nextUrl.searchParams.get('json') === '1') {
+      return Response.json({ success: true, url: streamUrl })
+    }
 
     return new Response(null, {
       status: 302,

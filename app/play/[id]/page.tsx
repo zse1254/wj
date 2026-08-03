@@ -126,6 +126,17 @@ export default function PlayPage() {
     }
   }
 
+  // 解析 Deno 直连 URL（?json=1 返回直链，避免 <video> 请求跨域 302 时浏览器剥离 Range 头）
+  // 返回 null 表示直链不可用
+  async function resolveDurl(bvid: string, page: number, i = 0): Promise<string | null> {
+    try {
+      const res = await fetch(`/api/durl/${bvid}?p=${page}&i=${i}&json=1`)
+      if (!res.ok) return null
+      const j = await res.json().catch(() => null)
+      return j?.success && j.url ? j.url : null
+    } catch { return null }
+  }
+
   async function load() {
     const seq = ++loadSeqRef.current
     const id = params.id as string
@@ -209,8 +220,6 @@ export default function PlayPage() {
       if (playerRef.current) { try { playerRef.current.reset() } catch {}; playerRef.current = null }
     }
 
-    const mp4Url = `/api/durl/${bvid}?p=${page}`
-
     let mp4Failed = false
     const mp4Timeout = setTimeout(() => {
       if (!video || mp4Failed) return
@@ -237,8 +246,16 @@ export default function PlayPage() {
       video.removeEventListener('loadeddata', mp4LoadHandler)
       video.addEventListener('error', mp4ErrorHandler)
       video.addEventListener('loadeddata', mp4LoadHandler)
-      video.src = mp4Url
-      video.load()
+      const direct = await resolveDurl(bvid, page)
+      if (direct) {
+        video.src = direct
+        video.load()
+      } else {
+        mp4Failed = true
+        clearTimeout(mp4Timeout)
+        setStatus('直链不可用，尝试其他节点...')
+        await startDashPlay()
+      }
     }
 
     // 手机/无MSE：durl 失败 → 轮换 CDN 节点重试，绝不再跳官方 iframe
@@ -253,7 +270,14 @@ export default function PlayPage() {
       mp4Failed = false
       v.removeEventListener('error', mp4ErrorHandler)
       v.removeEventListener('loadeddata', mp4LoadHandler)
-      v.src = `/api/durl/${bvid}?p=${page}&i=${retryRef.current}`
+      const direct = await resolveDurl(bvid, page, retryRef.current)
+      if (!direct) {
+        v.addEventListener('error', mp4ErrorHandler)
+        v.addEventListener('loadeddata', mp4LoadHandler)
+        await tryAutoplay(v)
+        return
+      }
+      v.src = direct
       v.load()
       v.addEventListener('error', mp4ErrorHandler)
       v.addEventListener('loadeddata', mp4LoadHandler)
@@ -320,12 +344,14 @@ export default function PlayPage() {
     const v = videoRef.current
 
     if (isMobile || !v || !('MediaSource' in window)) {
-      // durl 模式：换源 = 重新请求 durl（Deno 会换 backup_url 或重新签名）
+      // durl 模式：换源 = 重新请求 durl 直链（绕过 302 丢 Range，直连 Deno）
       setStatus(`重新加载...`)
       destroy()
       const video = videoRef.current
       if (!video) return
-      video.src = `/api/durl/${bvid}?p=${page}`
+      const direct = await resolveDurl(bvid, page)
+      if (!direct) { setStatus('直链不可用'); return }
+      video.src = direct
       video.load()
       await tryAutoplay(video)
       return
