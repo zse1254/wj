@@ -400,47 +400,49 @@ export default function EditArticlePage() {
 
         {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
           <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-2">
-            <div className="flex items-center gap-3">
-              <span className="text-green-700 font-medium shrink-0">播放页</span>
-              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
-                className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
-              <button type="button" onClick={() => {
-                const url = `${window.location.origin}/play/${params.id}`
-                navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
-              }}
-                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs shrink-0">
-                复制
-              </button>
+            <div className="font-semibold text-green-800">
+              完整 mp4 直链（复制此链接，手机/电脑浏览器直接打开即播放，无B站痕迹）
             </div>
             {directLinks.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-gray-500">
-                  完整 mp4 直链{form.type === 'series' && directLinks.length > 1 ? `（共 ${directLinks.length} 集，每集按需生成，不消耗额度）` : '（点击复制，浏览器直接打开即可播放）'}
-                </p>
                 <div className="max-h-56 overflow-y-auto space-y-1">
                   {directLinks.map((l, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-24 shrink-0 truncate">{l.label}</span>
+                    <div key={i} className="flex items-center gap-2 bg-white rounded p-1.5 border border-green-200">
+                      <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{l.label}</span>
                       <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${l.url}`}
-                        className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono truncate" onClick={e => (e.target as HTMLInputElement).select()} />
+                        className="flex-1 px-2 py-1 bg-green-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
                       <button type="button" onClick={() => {
                         const url = `${window.location.origin}${l.url}`
-                        navigator.clipboard.writeText(url).then(() => alert('已复制，浏览器打开即可播放')).catch(() => alert('复制失败'))
+                        navigator.clipboard.writeText(url).then(() => alert('已复制，手机/电脑浏览器打开即可播放')).catch(() => alert('复制失败'))
                       }}
-                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 shrink-0">复制</button>
-                      <button type="button" onClick={() => window.open(l.url, '_blank')}
-                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 shrink-0">预览</button>
+                        className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 shrink-0 font-medium">复制直链</button>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  直链为完整 mp4（360p 免登录），每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。
+                <p className="text-[10px] text-gray-500">
+                  {form.type === 'series' && directLinks.length > 1
+                    ? `共 ${directLinks.length} 集，每集一条直链，点击"复制直链"后手机浏览器打开即播。`
+                    : '手机浏览器直接打开该链接，原生播放 mp4，不走任何网页播放器。'}
+                  每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。360p 免登录。
                 </p>
               </div>
             )}
             {directLinks.length === 0 && form.bilibili_url && (
               <p className="text-xs text-gray-500">无法生成直链：未识别到 BV 号</p>
             )}
+
+            <div className="flex items-center gap-3 pt-1 border-t border-green-200">
+              <span className="text-green-700 font-medium shrink-0">网页播放页</span>
+              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}`}
+                className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+              <button type="button" onClick={() => {
+                const url = `${window.location.origin}/play/${params.id}`
+                navigator.clipboard.writeText(url).then(() => alert('已复制')).catch(() => alert('复制失败'))
+              }}
+                className="px-3 py-1 bg-white text-green-700 border border-green-300 rounded hover:bg-green-50 text-xs shrink-0">
+                复制
+              </button>
+            </div>
             {refreshMsg && (
               <div className="mt-1 p-2 bg-white border rounded text-xs font-mono break-all whitespace-pre-wrap">
                 {refreshMsg}
