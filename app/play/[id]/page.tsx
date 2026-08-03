@@ -196,75 +196,62 @@ export default function PlayPage() {
 
     const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream
     const isAndroid = /Android/i.test(navigator.userAgent)
-    const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
     const isMobile = isiOS || isAndroid
 
-    // 2. Fetch playurl data (with durl for direct playback, cached in D1)
-    setStatus('获取播放源...')
-    const puRes = await fetch(`/api/playurl/${bvid}?p=${page}`).catch(() => null)
-    let directUrl = ''
-    if (puRes?.ok) {
-      const puJson = await puRes.json().catch(() => ({}))
-      directUrl = (puJson as any).directUrl || ''
-      // If durl is empty (fnval=4048 returns no durl), use DASH video baseUrl for mobile
-      // B站 m4s files are fragmented MP4 — <video> can play them directly
-      if (!directUrl) {
-        directUrl = (puJson as any).dashVideoUrl || ''
-      }
-    }
-
     const video = videoRef.current
-    if (!video) return
 
-    // 3. Tier 1: Direct <video> playback (mobile + durl available)
-    // No Deno segment proxy needed, 1 Deno call total
-    if (directUrl && isMobile) {
-      setStatus('加载直链...')
-      setUsingIframe(false)
-      const old = video.parentElement?.querySelector('iframe'); if (old) old.remove()
+    // 1. 默认：durl mp4（完整 mp4，任意浏览器原生可播，无B站痕迹，1次Deno请求/视频）
+    // 仅 360p（B站匿名 durl 限制），但省额度（相比 dash.js 省99%）
+    setStatus('加载视频...')
+    setUsingIframe(false)
+    if (video) {
+      const oldIframe = video.parentElement?.querySelector('iframe'); if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
-
-      // Simple event-based fallback
-      let loaded = false
-      const onError = () => {
-        if (loaded) return
-        video.removeEventListener('error', onError)
-        video.removeEventListener('loadeddata', onLoaded)
-        setStatus('直链失败，尝试 DASH...')
-        startDashPlay()
-      }
-      const onLoaded = () => {
-        loaded = true
-        setStatus('')
-        video.play().catch(() => {})
-      }
-      video.addEventListener('error', onError)
-      video.addEventListener('loadeddata', onLoaded)
-      video.src = directUrl
-      
-      // Timeout: after 8s no data, fallback to dash
-      setTimeout(() => {
-        if (!loaded) {
-          video.removeEventListener('error', onError)
-          video.removeEventListener('loadeddata', onLoaded)
-          setStatus('直链超时，尝试 DASH...')
-          startDashPlay()
-        }
-      }, 8000)
-
-      return
+      if (playerRef.current) { try { playerRef.current.reset() } catch {}; playerRef.current = null }
     }
 
-    // 4. Tier 2+3: dash.js → iframe fallback
-    startDashPlay()
+    const mp4Url = `/api/durl/${bvid}?p=${page}`
 
+    let mp4Failed = false
+    const mp4Timeout = setTimeout(() => {
+      if (!video || mp4Failed) return
+      mp4Failed = true
+      setStatus('直链超时，尝试高清...')
+      startDashPlay()
+    }, 10000)
+
+    const mp4ErrorHandler = async () => {
+      if (mp4Failed) return
+      mp4Failed = true
+      clearTimeout(mp4Timeout)
+      setStatus('直链失败，尝试高清...')
+      await startDashPlay()
+    }
+    const mp4LoadHandler = () => {
+      clearTimeout(mp4Timeout)
+      setStatus('')
+      video?.play().catch(() => {})
+    }
+
+    if (video) {
+      video.removeEventListener('error', mp4ErrorHandler)
+      video.removeEventListener('loadeddata', mp4LoadHandler)
+      video.addEventListener('error', mp4ErrorHandler)
+      video.addEventListener('loadeddata', mp4LoadHandler)
+      video.src = mp4Url
+      video.load()
+    }
+
+    // 高清（桌面，dash.js 720p）或 mp4 失败兜底
     async function startDashPlay() {
       const v = videoRef.current
-      if (!v || !hasMSE || isiOS) {
-        setStatus('切换官方播放器...'); await fallback(bvid, page); return
+      const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
+      if (!v || !hasMSE || isMobile) {
+        // 手机或无MSE：直接 iframe
+        setStatus('切换播放器...'); await fallback(bvid, page); return
       }
 
-      setStatus('加载 DASH 流...')
+      setStatus('加载高清流...')
       setUsingIframe(false)
       const old = v.parentElement?.querySelector('iframe'); if (old) old.remove()
       v.style.display = 'block'
@@ -294,7 +281,7 @@ export default function PlayPage() {
           if (started) return
           errRef.current++
           if (errRef.current >= MAX_ERR) {
-            setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
+            setStatus('播放失败，切换播放器...'); await fallback(bvid, page)
           }
         })
 
@@ -302,7 +289,7 @@ export default function PlayPage() {
           if (started) return
           errRef.current++
           if (errRef.current >= MAX_ERR) {
-            setStatus('播放失败，切换备用方案...'); await fallback(bvid, page)
+            setStatus('播放失败，切换播放器...'); await fallback(bvid, page)
           }
         })
 
@@ -316,10 +303,9 @@ export default function PlayPage() {
 
       } catch (e: any) {
         console.error('[dashjs]', e)
-        setStatus('播放器错误，切换备用方案...'); await fallback(bvid, page)
+        setStatus('播放器错误，切换播放器...'); await fallback(bvid, page)
       }
     }
-
     }
 
   function playVid(bvid: string, page: number) { return loadVideo(bvid, page) }
@@ -332,18 +318,34 @@ export default function PlayPage() {
   async function switchCdn(it: { host: string; label: string }) {
     setMenuOpen('')
     const bvid = bvidRef.current; const page = pageRef.current
+    const isMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
+    const v = videoRef.current
+
+    if (isMobile || !v || !('MediaSource' in window)) {
+      // durl 模式：换源 = 重新请求 durl（Deno 会换 backup_url 或重新签名）
+      setStatus(`重新加载...`)
+      destroy()
+      const video = videoRef.current
+      if (!video) return
+      video.src = `/api/durl/${bvid}?p=${page}`
+      video.load()
+      video.play().catch(() => {})
+      return
+    }
+
+    // dash.js 模式：换源 = 换 CDN host
     const newMpdUrl = `/api/mpd/${bvid}?p=${page}&cdn=host:${it.host}`
     setStatus(`切换: ${it.label}`)
 
     destroy()
-    const video = videoRef.current; if (!video) return
+    if (!v) return
     const dashjs = await import('dashjs')
     const player = dashjs.MediaPlayer().create()
     playerRef.current = player
     player.updateSettings({
       streaming: { abr: { autoSwitchBitrate: { video: false, audio: false } }, buffer: { fastSwitchEnabled: true } },
     })
-    player.initialize(video, newMpdUrl, false)
+    player.initialize(v, newMpdUrl, false)
   }
 
   // ----- JSX -----
