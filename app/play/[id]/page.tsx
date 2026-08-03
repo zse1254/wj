@@ -38,6 +38,7 @@ export default function PlayPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const errRef = useRef(0)
   const retryRef = useRef(0)
+  const dashFallbackRef = useRef(false)
   const bvidRef = useRef('')
   const pageRef = useRef(1)
   const vsRef = useRef<SeriesVid[]>([])
@@ -107,6 +108,7 @@ export default function PlayPage() {
     const v = videoRef.current; if (v) { try { v.removeAttribute('src'); v.load() } catch {} }
     errRef.current = 0
     retryRef.current = 0
+    dashFallbackRef.current = false
   }
 
   // 自动播放可能被浏览器（尤其手机/iframe）拦截带声音播放。
@@ -221,22 +223,36 @@ export default function PlayPage() {
     }
 
     let mp4Failed = false
-    const mp4Timeout = setTimeout(() => {
-      if (!video || mp4Failed) return
-      mp4Failed = true
-      setStatus('直链超时，尝试其他节点...')
-      startDashPlay()
-    }, 10000)
+    let stallTimer: ReturnType<typeof setInterval> | null = null
+    let lastProgress = 0
+    // 手机端 Deno 代理慢（实测 45s 才起播），只要一直在收数据就不切换；
+    // 停止收数据超过 stallMs 才判定失败，避免杀掉慢速但正常的流
+    const stallMs = isMobile ? 20000 : 10000
+    const clearStall = () => { if (stallTimer) { clearInterval(stallTimer); stallTimer = null } }
+    const armStall = () => {
+      clearStall()
+      lastProgress = Date.now()
+      stallTimer = setInterval(() => {
+        if (mp4Failed) return
+        if (Date.now() - lastProgress > stallMs) {
+          mp4Failed = true
+          clearStall()
+          setStatus('直链超时，尝试其他节点...')
+          startDashPlay()
+        }
+      }, 3000)
+    }
+    const progressHandler = () => { lastProgress = Date.now() }
 
     const mp4ErrorHandler = async () => {
       if (mp4Failed) return
       mp4Failed = true
-      clearTimeout(mp4Timeout)
+      clearStall()
       setStatus('直链失败，尝试其他节点...')
       await startDashPlay()
     }
     const mp4LoadHandler = () => {
-      clearTimeout(mp4Timeout)
+      clearStall()
       setStatus('')
       if (video) tryAutoplay(video)
     }
@@ -244,36 +260,49 @@ export default function PlayPage() {
     if (video) {
       video.removeEventListener('error', mp4ErrorHandler)
       video.removeEventListener('loadeddata', mp4LoadHandler)
+      video.removeEventListener('progress', progressHandler)
       video.addEventListener('error', mp4ErrorHandler)
       video.addEventListener('loadeddata', mp4LoadHandler)
+      video.addEventListener('progress', progressHandler)
       const direct = await resolveDurl(bvid, page)
       if (direct) {
         video.src = direct
         video.load()
+        armStall()
       } else {
         mp4Failed = true
-        clearTimeout(mp4Timeout)
         setStatus('直链不可用，尝试其他节点...')
         await startDashPlay()
       }
     }
 
-    // 手机/无MSE：durl 失败 → 轮换 CDN 节点重试，绝不再跳官方 iframe
+    // 手机/无MSE：durl 失败 → 轮换 Deno 节点重试；全部失败且支持 MSE 则退到 dash.js，绝不再跳官方 iframe
     async function retryDurl() {
       const v = videoRef.current
       if (!v) return
       retryRef.current++
       if (retryRef.current >= MAX_ERR) {
+        const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
+        if (hasMSE && !dashFallbackRef.current) {
+          dashFallbackRef.current = true
+          await startDashPlay()
+          return
+        }
         setStatus('直链播放失败，请稍后重试')
         return
       }
       mp4Failed = false
       v.removeEventListener('error', mp4ErrorHandler)
       v.removeEventListener('loadeddata', mp4LoadHandler)
-      const direct = await resolveDurl(bvid, page, retryRef.current)
+      v.removeEventListener('progress', progressHandler)
+      // i 固定为 0：每次重新 resolveDurl 会随机挑一个 Deno 代理，
+      // 且主源永远是 loadAndCachePlayurl 重排后的健康源（换 backup 反而更慢）
+      const direct = await resolveDurl(bvid, page)
       if (!direct) {
         v.addEventListener('error', mp4ErrorHandler)
         v.addEventListener('loadeddata', mp4LoadHandler)
+        v.addEventListener('progress', progressHandler)
+        armStall()
         await tryAutoplay(v)
         return
       }
@@ -281,14 +310,17 @@ export default function PlayPage() {
       v.load()
       v.addEventListener('error', mp4ErrorHandler)
       v.addEventListener('loadeddata', mp4LoadHandler)
+      v.addEventListener('progress', progressHandler)
+      armStall()
       await tryAutoplay(v)
     }
 
-    // 桌面端 durl 失败 → dash.js 高清（720p）兜底，失败也只换节点不再跳 iframe
+    // 桌面端 durl 失败 → dash.js 高清（720p）兜底；手机端 durl 节点全失败也退到 dash.js。
+    // 失败也只换节点不再跳 iframe
     async function startDashPlay() {
       const v = videoRef.current
       const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
-      if (!v || !hasMSE || isMobile) {
+      if (!v || !hasMSE) {
         await retryDurl(); return
       }
       setStatus('加载高清流...')
