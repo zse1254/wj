@@ -43,6 +43,7 @@ export default function PlayPage() {
   const vsRef = useRef<SeriesVid[]>([])
   const ciRef = useRef(-1)
   const autoplayNextRef = useRef(true)
+  const loadSeqRef = useRef(0)
   const MAX_ERR = 5
 
   const [status, setStatus] = useState('加载中...')
@@ -52,6 +53,7 @@ export default function PlayPage() {
   const [seriesOpen, setSeriesOpen] = useState(false)
   const [autoplayNext, setAutoplayNext] = useState(true)
   const [menuOpen, setMenuOpen] = useState('')
+  const [soundBlocked, setSoundBlocked] = useState(false)
 
   const isMobileUA = typeof navigator !== 'undefined' && /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
 
@@ -77,7 +79,9 @@ export default function PlayPage() {
     return () => el.removeEventListener('pointerdown', h)
   }, [])
 
-  useEffect(() => { load() }, [params.id, sp])
+  const pParam = sp.get('p')
+
+  useEffect(() => { load() }, [params.id, pParam])
 
   // 原生 <video> 播完（手机 durl mp4 / CDN 换源后）自动连播下一集
   useEffect(() => {
@@ -105,7 +109,25 @@ export default function PlayPage() {
     retryRef.current = 0
   }
 
+  // 自动播放可能被浏览器（尤其手机/iframe）拦截带声音播放。
+  // 先试正常播放；被拒则静音自动播，并提示用户点击开启声音。
+  async function tryAutoplay(v: HTMLVideoElement) {
+    try {
+      const p = v.play()
+      if (p) { await p; setSoundBlocked(false); return }
+      setSoundBlocked(false)
+    } catch {
+      try {
+        v.muted = true
+        const p = v.play()
+        if (p) await p
+        setSoundBlocked(true)
+      } catch { setSoundBlocked(false) }
+    }
+  }
+
   async function load() {
+    const seq = ++loadSeqRef.current
     const id = params.id as string
     if (/^BV[a-zA-Z0-9]+$/.test(id)) return loadVideo(id, getCurPage())
 
@@ -114,6 +136,7 @@ export default function PlayPage() {
     if (!res?.ok) { setStatus('视频不存在'); return }
     const json = await res.json()
     if (!json.success || !json.data) { setStatus('视频不存在'); return }
+    if (loadSeqRef.current !== seq) return
 
     const article = json.data
     if (article.content) {
@@ -206,7 +229,7 @@ export default function PlayPage() {
     const mp4LoadHandler = () => {
       clearTimeout(mp4Timeout)
       setStatus('')
-      video?.play().catch(() => {})
+      if (video) tryAutoplay(video)
     }
 
     if (video) {
@@ -234,7 +257,7 @@ export default function PlayPage() {
       v.load()
       v.addEventListener('error', mp4ErrorHandler)
       v.addEventListener('loadeddata', mp4LoadHandler)
-      v.play().catch(() => {})
+      await tryAutoplay(v)
     }
 
     // 桌面端 durl 失败 → dash.js 高清（720p）兜底，失败也只换节点不再跳 iframe
@@ -304,7 +327,7 @@ export default function PlayPage() {
       if (!video) return
       video.src = `/api/durl/${bvid}?p=${page}`
       video.load()
-      video.play().catch(() => {})
+      await tryAutoplay(video)
       return
     }
 
@@ -380,6 +403,15 @@ export default function PlayPage() {
         </div>
         <button onClick={() => videoRef.current?.requestFullscreen?.().catch(() => {})} style={btn}>全屏</button>
       </div>
+      {soundBlocked && (
+        <button onClick={async () => {
+          const v = videoRef.current; if (!v) return
+          v.muted = false
+          try { await v.play(); setSoundBlocked(false) } catch {}
+        }} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 12, padding: '14px 26px', fontSize: 15, fontFamily: 'sans-serif', background: 'rgba(0,0,0,.75)', color: '#fff', border: '1px solid rgba(255,255,255,.4)', borderRadius: 999, cursor: 'pointer', backdropFilter: 'blur(4px)', whiteSpace: 'nowrap' }}>
+          🔊 点击开启声音
+        </button>
+      )}
       {status && (
         <div style={{ position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)', color: '#999', fontFamily: 'sans-serif', fontSize: 14, background: 'rgba(0,0,0,.7)', padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap' }}>
           {status}

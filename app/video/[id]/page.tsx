@@ -54,6 +54,9 @@ export default function VideoDetailPage() {
         <iframe
           src={`/play/${articleId}`}
           allowFullScreen
+          allow="autoplay"
+          referrerPolicy="no-referrer"
+          sandbox="allow-scripts allow-same-origin"
           style={{
             position: 'absolute', top: 0, left: 0,
             width: '100%', height: '100%', border: 'none',
