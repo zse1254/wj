@@ -228,9 +228,10 @@ export default function PlayPage() {
     // durl 失败统一入口：手机端优先换 Deno 代理重试（Deno 代理速度波动大，换一个可能质变），
     // 桌面端直接走 dash.js（720p 高清更好）。手机端代理穷尽后才退 dash。（用 let 延迟绑定 retryDurl/startDashPlay）
     let handleDurlFailure: () => any = () => startDashPlay()
-    // 手机端 Deno 代理慢（实测 45s 才起播），只要一直在收数据就不切换；
-    // 停止收数据超过 stallMs 才判定失败，避免杀掉慢速但正常的流
-    const stallMs = isMobile ? 20000 : 10000
+    // 手机端 Deno 慢，但也不能让它无限重试拖太久；手机端 stall 更短、重试上限更低，
+    // 尽快切到 dash.js（720p 分片顺序加载，抗慢网更稳）兜底
+    const stallMs = isMobile ? 12000 : 10000
+    const MAX_MOBILE_RETRY = 2
     const clearStall = () => { if (stallTimer) { clearInterval(stallTimer); stallTimer = null } }
     const armStall = () => {
       clearStall()
@@ -290,7 +291,8 @@ export default function PlayPage() {
       const v = videoRef.current
       if (!v) return
       retryRef.current++
-      if (retryRef.current >= MAX_ERR) {
+      const retryLimit = isMobile ? MAX_MOBILE_RETRY : MAX_ERR
+      if (retryRef.current >= retryLimit) {
         const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
         if (hasMSE && !dashFallbackRef.current) {
           dashFallbackRef.current = true
