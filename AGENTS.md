@@ -180,3 +180,27 @@ https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/.../...-1-30280.m4s
 - CF Pages IP：B站 API 412、CDN 403（都不能直连）
 - Deno Deploy IP：可用（能调 API + 转发 CDN）
 <!-- END:direct-link-requirements -->
+
+<!-- BEGIN:合集播放bug-2026-08 -->
+# 合集播放页 bug：手机打开合集自动跳到第一集
+
+## 背景
+用户：站长本人，用安卓手机自带浏览器测试。已经为这个问题反复反馈了很多次，非常厌烦反复询问。**看到问题务必直接修，不要反复问"用的什么浏览器/打开哪个链接/看到什么"。**
+
+## 已确认事实（用户明确告知，不要质疑）
+1. **两条不同的链接/播放器：**
+   - **合集链接** = `https://wj.hvhh.cn/play/1e0ac449-cb63-4087-9e88-7a3fb4b592f2?v=2`（对应 bvid `BV1Ya411p7Z5`，37 集）。这是**合集播放器**页（有"剧集(37)"按钮、连播、"选集横条"）。
+   - **第一集链接** = `https://wj.hvhh.cn/api/durl/BV1Ya411p7Z5?p=1`（302 → Deno mp4，原生播放器）。
+2. **核心Bug：手机打开"合集链接"时，先黑屏停几秒没播放，然后自动跳到/变成"第一集链接"播放。** 页面最终表现成单集播放器（只有一个视频，无法选集、无法连播）。
+3. 用户原话（多个版本）："合集不能播放 自动跳转第一集的网址播放 只能播一集 不能连播选集"、"合集和第一集播放器都不一样"。
+4. 电脑端合集能正常选集+连播；手机端单集直链能播；**唯独手机端合集集合不能选集连播**。
+5. "其他浏览器只有声音没有画面" = HEVC (hev1) 轨问题，已在 `/api/mpd` 修复（避开 hev1 用 avc1/av01）。
+
+## 播放逻辑（当前代码 `/app/play/[id]/page.tsx`）
+- `load()`：若 `id` 是 BV 号 → `loadVideo`；否则 fetch `/api/articles/[id]`，解析 `content.videos`（>1 集 → 选集UI + 播第一集）。
+- `loadVideo` → durl 模式：`resolveDurl()` 拿 `/api/durl/bvid?p=N&json=1` 的 Deno 直链 → `video.src`。
+- **疑点**：如果 `content.videos` 解析不出合集（数组只有 1 个/为空），会 fallback 到 `bilibili_url` 单集，导致变成"第一集播放器"。需确认该文章 content 是否真的是 37 集 videos。
+
+## 注意
+- 用户不允许我再反复问问题。遇到不确定的，先自己读代码/查线上数据/实测，能确定就直接修。
+<!-- END:合集播放bug-2026-08 -->

@@ -400,49 +400,61 @@ export default function EditArticlePage() {
 
         {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
           <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm space-y-2">
-            <div className="font-semibold text-green-800">
-              完整 mp4 直链（复制此链接，手机/电脑浏览器直接打开即播放，无B站痕迹）
-            </div>
-            {directLinks.length > 0 && (
-              <div className="space-y-1">
-                <div className="max-h-56 overflow-y-auto space-y-1">
-                  {directLinks.map((l, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-white rounded p-1.5 border border-green-200">
-                      <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{l.label}</span>
-                      <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${l.url}`}
-                        className="flex-1 px-2 py-1 bg-green-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
-                      <button type="button" onClick={() => {
-                        const url = `${window.location.origin}${l.url}`
-                        navigator.clipboard.writeText(url).then(() => alert('已复制，手机/电脑浏览器打开即可播放')).catch(() => alert('复制失败'))
-                      }}
-                        className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 shrink-0 font-medium">复制直链</button>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-gray-500">
-                  {form.type === 'series' && directLinks.length > 1
-                    ? `共 ${directLinks.length} 集，每集一条直链，点击"复制直链"后手机浏览器打开即播。`
-                    : '手机浏览器直接打开该链接，原生播放 mp4，不走任何网页播放器。'}
-                  每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。360p 免登录。
-                </p>
+            {/* 合集直链 = 网页播放页：合集只有一个链接，能选集+连播（这是主链接） */}
+            <div className={form.type === 'series' ? 'p-2 bg-green-600 rounded-lg space-y-1.5' : 'space-y-1.5'}>
+              <div className="font-semibold text-white">
+                {form.type === 'series' ? '👉 合集直链（就这一个链接，看全集、能选集、自动连播）' : '网页播放页'}
               </div>
-            )}
-            {directLinks.length === 0 && form.bilibili_url && (
-              <p className="text-xs text-gray-500">无法生成直链：未识别到 BV 号</p>
-            )}
-
-            <div className="flex items-center gap-3 pt-1 border-t border-green-200">
-              <span className="text-green-700 font-medium shrink-0">网页播放页</span>
-              <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=2`}
-                className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
-              <button type="button" onClick={() => {
-                const url = `${window.location.origin}/play/${params.id}?v=2`
-                navigator.clipboard.writeText(url).then(() => alert('已复制（新链接已绕过旧版缓存）')).catch(() => alert('复制失败'))
-              }}
-                className="px-3 py-1 bg-white text-green-700 border border-green-300 rounded hover:bg-green-50 text-xs shrink-0">
-                复制
-              </button>
+              <div className="flex items-center gap-2">
+                <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=2`}
+                  className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                <button type="button" onClick={() => {
+                  const url = `${window.location.origin}/play/${params.id}?v=2`
+                  navigator.clipboard.writeText(url).then(() => alert('已复制（新链接已绕过旧版缓存）')).catch(() => alert('复制失败'))
+                }}
+                  className="px-3 py-1 bg-white text-green-700 border border-green-300 rounded hover:bg-green-50 text-xs shrink-0">
+                  复制
+                </button>
+              </div>
+              {form.type === 'series' && (
+                <p className="text-[10px] text-green-100">手机/电脑浏览器直接打开，去B站痕迹，底部有选集横条、可自动连播。</p>
+              )}
             </div>
+
+            {/* 备用：单集 mp4 直链（每集一条，原生播放器，无选集界面） */}
+            <div className="pt-2 border-t border-green-200">
+              <div className="font-semibold text-green-800">
+                {form.type === 'series' ? '备用：单集 mp4 直链（每集一条，原生播放器）' : '完整 mp4 直链（复制此链接，浏览器直接打开即播放，无B站痕迹）'}
+              </div>
+              {directLinks.length > 0 && (
+                <div className="space-y-1 mt-1">
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {directLinks.map((l, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-white rounded p-1.5 border border-green-200">
+                        <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{l.label}</span>
+                        <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${l.url}`}
+                          className="flex-1 px-2 py-1 bg-green-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
+                        <button type="button" onClick={() => {
+                          const url = `${window.location.origin}${l.url}`
+                          navigator.clipboard.writeText(url).then(() => alert('已复制，手机/电脑浏览器打开即可播放')).catch(() => alert('复制失败'))
+                        }}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 shrink-0 font-medium">复制直链</button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-500">
+                    {form.type === 'series' && directLinks.length > 1
+                      ? `共 ${directLinks.length} 集，每集一条直链。`
+                      : '手机浏览器直接打开该链接，原生播放 mp4，不走任何网页播放器。'}
+                    每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。360p 免登录。
+                  </p>
+                </div>
+              )}
+              {directLinks.length === 0 && form.bilibili_url && (
+                <p className="text-xs text-gray-500 mt-1">无法生成直链：未识别到 BV 号</p>
+              )}
+            </div>
+
             {refreshMsg && (
               <div className="mt-1 p-2 bg-white border rounded text-xs font-mono break-all whitespace-pre-wrap">
                 {refreshMsg}
