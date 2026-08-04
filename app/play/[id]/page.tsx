@@ -238,26 +238,14 @@ export default function PlayPage() {
 
     const video = videoRef.current
 
-    // 1. 播放方案：
-    //    桌面端：durl mp4（完整 mp4，360p，省额度），失败再退 dash.js
-    //    手机端：直接 dash.js + MPD（H.264 分片渐进）。因为 durl 完整 mp4 是 38MB 大文件，
-    //          手机走 Deno 代理很慢（约17KB/s），38MB 永远加载不出 → 黑屏/卡/没声音；
-    //          dash 是 H.264 小分片，能一段段稳定加载，最兼容最不卡。
-    setStatus(isMobile ? '加载高清流...' : '加载视频...')
+    // 1. 播放方案（以"省 Deno 额度"为核心）：
+    //    durl 完整 mp4（360p）：仅 1-2 次 Deno 请求/视频，浏览器原生流式播放（mp4 渐进式/可seek）。
+    //    所有设备（含手机）优先 durl；dash.js 分片（每片都走 Deno，300+次/视频）只作最后兜底。
+    setStatus('加载视频...')
     if (video) {
       const oldIframe = video.parentElement?.querySelector('iframe'); if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
       if (playerRef.current) { try { playerRef.current.reset() } catch {}; playerRef.current = null }
-    }
-
-    if (isMobile) {
-      // 手机端直接走 dash.js 分片播放（H.264，最兼容），不碰 38MB durl 大文件
-      const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
-      if (hasMSE) { await startDashPlay(); return }
-      // 无 MSE 的极老手机才退回 durl
-      const direct = await resolveDurl(bvid, page)
-      if (direct) { video!.src = direct; video!.load(); if (video) tryAutoplay(video) }
-      return
     }
 
     let mp4Failed = false
@@ -318,18 +306,15 @@ export default function PlayPage() {
       }
     }
 
-    // durl 失败统一入口：手机端优先换 Deno 代理重试（Deno 代理速度波动大，换一个可能质变），
-    // 桌面端直接走 dash.js（720p 高清更好）。手机端代理穷尽后才退 dash。
-    handleDurlFailure = () => {
-      if (isMobile) return retryDurl()
-      return startDashPlay()
-    }
-    // 手机/无MSE：durl 失败 → 轮换 Deno 节点重试；全部失败且支持 MSE 则退到 dash.js，绝不再跳官方 iframe
+    // durl 失败统一入口：所有设备都优先换 Deno 代理重试（Deno 代理速度波动大，换一个可能质变），
+    // 重试耗尽后才退 dash.js（dash 每分片都走 Deno，300+次/视频，极其烧额度，仅作最后兜底）。
+    handleDurlFailure = () => retryDurl()
+    // durl 失败 → 轮换 Deno 节点重试；全部失败且支持 MSE 才退到 dash.js，绝不再跳官方 iframe
     async function retryDurl() {
       const v = videoRef.current
       if (!v) return
       retryRef.current++
-      const retryLimit = isMobile ? MAX_MOBILE_RETRY : MAX_ERR
+      const retryLimit = MAX_MOBILE_RETRY
       if (retryRef.current >= retryLimit) {
         const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
         if (hasMSE && !dashFallbackRef.current) {
