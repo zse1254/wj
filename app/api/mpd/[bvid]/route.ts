@@ -58,7 +58,12 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
   })
   let audioStreams = data.dash?.audio || []
 
-  if (streams.length === 0) streams = data.dash?.video || []
+  // 没有 AVC (H.264) 时：优先 av01 (AV1)，绝不选 hev (HEVC)——
+  // HEVC 只有 Chrome/部分浏览器硬解支持，其他浏览器会"只有声音没画面"
+  if (streams.length === 0) {
+    streams = (data.dash?.video || []).filter((v: any) => (v.codecs || '').toLowerCase().startsWith('av01'))
+    if (streams.length === 0) streams = data.dash?.video || []
+  }
 
   if (qnParam && qnParam !== 'all') {
     const qn = parseInt(qnParam, 10)
