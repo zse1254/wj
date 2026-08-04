@@ -389,11 +389,11 @@ export default function PlayPage() {
             buffer: { fastSwitchEnabled: true },
           },
         })
-        player.initialize(v, mpdUrl, false)
+        player.initialize(v, mpdUrl, true)
         let started = false
-        player.on('streamInitialized', () => setStatus(''))
+        player.on('streamInitialized', () => { setStatus(''); if (v && !started) tryAutoplay(v).catch(() => {}) })
         player.on('playbackPlaying', () => { setStatus(''); started = true })
-        player.on('canPlay', () => setStatus(''))
+        player.on('canPlay', () => { setStatus(''); if (v && !started) tryAutoplay(v).catch(() => {}) })
         player.on('error', async () => {
           if (started) return
           errRef.current++
