@@ -152,24 +152,49 @@ export default function PlayPage() {
     if (loadSeqRef.current !== seq) return
 
     const article = json.data
+    const isSeriesType = article.type === 'series'
+    // 无论 content 解析结果如何，只要文章是合集类型且能从 /api/bvid 拿到多分P，
+    // 就必须保证走"合集界面"，绝不能退化成单集播放器
+    let items: SeriesVid[] = []
     if (article.content) {
       try {
         const content = typeof article.content === 'string' ? JSON.parse(article.content) : article.content
         let list: any[] = Array.isArray(content) ? content : content?.videos || []
-        const items: SeriesVid[] = list.map((v: any) => ({
+        items = list.map((v: any) => ({
           title: v.title || '', bvid: v.bvid || '', page: v.page || 1,
           cover_url: fixUrl(v.cover_url || v.first_frame || ''), duration: v.duration || 0,
         })).filter((v: SeriesVid) => v.bvid)
-        if (items.length > 1) {
-          setVids(items); setSeriesTitle(article.title || '合集')
-          const rp = getCurPage()
-          const idx = rp > 1 ? items.findIndex((v) => v.page === rp) : 0
-          setCurIdx(idx >= 0 ? idx : 0)
-          vsRef.current = items; ciRef.current = idx >= 0 ? idx : 0
-          return loadVideo(items[idx >= 0 ? idx : 0].bvid, items[idx >= 0 ? idx : 0].page)
-        }
-        if (items.length === 1) return loadVideo(items[0].bvid, items[0].page)
       } catch {}
+    }
+    if (items.length > 1) {
+      setVids(items); setSeriesTitle(article.title || '合集')
+      const rp = getCurPage()
+      const idx = rp > 1 ? items.findIndex((v) => v.page === rp) : 0
+      setCurIdx(idx >= 0 ? idx : 0)
+      vsRef.current = items; ciRef.current = idx >= 0 ? idx : 0
+      return loadVideo(items[idx >= 0 ? idx : 0].bvid, items[idx >= 0 ? idx : 0].page)
+    }
+    if (items.length === 1) return loadVideo(items[0].bvid, items[0].page)
+    if (isSeriesType && article.bilibili_url) {
+      // 合集类型但 content.videos 解析失败/缺失 → 用 bvid 重新拉分P重建合集，
+      // 避免退化成单集（手机上最常见的退化原因就是这里）
+      const bvid = article.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0]
+      if (bvid) {
+        const infoRes = await fetch(`/api/bvid/${bvid}`).catch(() => null)
+        if (infoRes?.ok) {
+          const ij = await infoRes.json().catch(() => ({}))
+          const pages = ij?.success ? ij.data?.pages : null
+          if (Array.isArray(pages) && pages.length > 1) {
+            const rebuilt: SeriesVid[] = pages.map((p: any) => ({
+              title: p.part || `第${p.page}集`, bvid, page: p.page || 1,
+              cover_url: fixUrl(p.cover_url || ''), duration: p.duration || 0,
+            }))
+            setVids(rebuilt); setSeriesTitle(article.title || '合集')
+            setCurIdx(0); vsRef.current = rebuilt; ciRef.current = 0
+            return loadVideo(bvid, rebuilt[0].page)
+          }
+        }
+      }
     }
     if (article.bilibili_url) {
       const bvid = article.bilibili_url.match(/BV[a-zA-Z0-9]+/)?.[0]

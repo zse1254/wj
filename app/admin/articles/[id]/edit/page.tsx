@@ -20,6 +20,9 @@ export default function EditArticlePage() {
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
   const [refreshMsg, setRefreshMsg] = useState('')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  // 合集直链的版本参数：每次进入/渲染都生成新随机数，
+  // 让手机浏览器拿到的链接每次都不同 → 强制加载最新播放器 JS，绕过旧缓存
+  const [playVer, setPlayVer] = useState(() => Math.floor(Math.random() * 1e9))
 
   // 本地生成完整 mp4 直链（0 Deno 请求，复制即播放）——直接在渲染时计算，跟随表单实时更新
   const buildDirectLinks = useCallback((bilibili_url: string, type: string, content: string): { label: string; url: string }[] => {
@@ -406,11 +409,11 @@ export default function EditArticlePage() {
                 {form.type === 'series' ? '👉 合集直链（就这一个链接，看全集、能选集、自动连播）' : '网页播放页'}
               </div>
               <div className="flex items-center gap-2">
-                <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=2`}
+                <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=${playVer}`}
                   className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
                 <button type="button" onClick={() => {
-                  const url = `${window.location.origin}/play/${params.id}?v=2`
-                  navigator.clipboard.writeText(url).then(() => alert('已复制（新链接已绕过旧版缓存）')).catch(() => alert('复制失败'))
+                  const url = `${window.location.origin}/play/${params.id}?v=${playVer}`
+                  navigator.clipboard.writeText(url).then(() => alert('已复制（链接带版本号，绕过旧缓存，手机打开即最新版合集播放器）')).catch(() => alert('复制失败'))
                 }}
                   className="px-3 py-1 bg-white text-green-700 border border-green-300 rounded hover:bg-green-50 text-xs shrink-0">
                   复制
