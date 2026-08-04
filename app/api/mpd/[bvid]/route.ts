@@ -1,7 +1,15 @@
 import { NextRequest } from 'next/server'
 import { getCachedPlayurl, loadAndCachePlayurl } from '@/lib/bvid-cache'
+import { DENO_PROXIES } from '@/lib/deno-proxy'
 
 export const dynamic = 'force-dynamic'
+
+// dash.js 兜底也使用 DENO_PROXIES 轮询（避免单代理速度慢/故障导致手机端无法起播）
+let proxyIdx = 0
+function nextProxyBase(): string {
+  proxyIdx = (proxyIdx + 1) % DENO_PROXIES.length
+  return `${DENO_PROXIES[proxyIdx]}/proxy?u=`
+}
 
 function replaceHost(url: string, newHost: string): string {
   try { const u = new URL(url); u.host = newHost; return u.toString() } catch { return url }
@@ -67,7 +75,7 @@ function buildMpd(data: any, cdnParam: string, qnParam?: string, audioParam?: st
     }
   }
 
-  const proxyBase = 'https://rustic-mayfly-8854.zse1254.deno.net/proxy?u='
+  const proxyBase = nextProxyBase()
 
   const videoReps = streams.map((v: any, i: number) => {
     const sb = getSegmentBase(v)

@@ -225,6 +225,9 @@ export default function PlayPage() {
     let mp4Failed = false
     let stallTimer: ReturnType<typeof setInterval> | null = null
     let lastProgress = 0
+    // durl 失败统一入口：手机端优先换 Deno 代理重试（Deno 代理速度波动大，换一个可能质变），
+    // 桌面端直接走 dash.js（720p 高清更好）。手机端代理穷尽后才退 dash。（用 let 延迟绑定 retryDurl/startDashPlay）
+    let handleDurlFailure: () => any = () => startDashPlay()
     // 手机端 Deno 代理慢（实测 45s 才起播），只要一直在收数据就不切换；
     // 停止收数据超过 stallMs 才判定失败，避免杀掉慢速但正常的流
     const stallMs = isMobile ? 20000 : 10000
@@ -238,7 +241,7 @@ export default function PlayPage() {
           mp4Failed = true
           clearStall()
           setStatus('直链超时，尝试其他节点...')
-          startDashPlay()
+          handleDurlFailure()
         }
       }, 3000)
     }
@@ -249,7 +252,7 @@ export default function PlayPage() {
       mp4Failed = true
       clearStall()
       setStatus('直链失败，尝试其他节点...')
-      await startDashPlay()
+      await handleDurlFailure()
     }
     const mp4LoadHandler = () => {
       clearStall()
@@ -272,10 +275,16 @@ export default function PlayPage() {
       } else {
         mp4Failed = true
         setStatus('直链不可用，尝试其他节点...')
-        await startDashPlay()
+        await handleDurlFailure()
       }
     }
 
+    // durl 失败统一入口：手机端优先换 Deno 代理重试（Deno 代理速度波动大，换一个可能质变），
+    // 桌面端直接走 dash.js（720p 高清更好）。手机端代理穷尽后才退 dash。
+    handleDurlFailure = () => {
+      if (isMobile) return retryDurl()
+      return startDashPlay()
+    }
     // 手机/无MSE：durl 失败 → 轮换 Deno 节点重试；全部失败且支持 MSE 则退到 dash.js，绝不再跳官方 iframe
     async function retryDurl() {
       const v = videoRef.current
