@@ -238,13 +238,26 @@ export default function PlayPage() {
 
     const video = videoRef.current
 
-    // 1. 默认：durl mp4（完整 mp4，任意浏览器原生可播，无B站痕迹，1次Deno请求/视频）
-    // 仅 360p（B站匿名 durl 限制），但省额度（相比 dash.js 省99%）
-    setStatus('加载视频...')
+    // 1. 播放方案：
+    //    桌面端：durl mp4（完整 mp4，360p，省额度），失败再退 dash.js
+    //    手机端：直接 dash.js + MPD（H.264 分片渐进）。因为 durl 完整 mp4 是 38MB 大文件，
+    //          手机走 Deno 代理很慢（约17KB/s），38MB 永远加载不出 → 黑屏/卡/没声音；
+    //          dash 是 H.264 小分片，能一段段稳定加载，最兼容最不卡。
+    setStatus(isMobile ? '加载高清流...' : '加载视频...')
     if (video) {
       const oldIframe = video.parentElement?.querySelector('iframe'); if (oldIframe) oldIframe.remove()
       video.style.display = 'block'
       if (playerRef.current) { try { playerRef.current.reset() } catch {}; playerRef.current = null }
+    }
+
+    if (isMobile) {
+      // 手机端直接走 dash.js 分片播放（H.264，最兼容），不碰 38MB durl 大文件
+      const hasMSE = typeof window !== 'undefined' && 'MediaSource' in window
+      if (hasMSE) { await startDashPlay(); return }
+      // 无 MSE 的极老手机才退回 durl
+      const direct = await resolveDurl(bvid, page)
+      if (direct) { video!.src = direct; video!.load(); if (video) tryAutoplay(video) }
+      return
     }
 
     let mp4Failed = false
@@ -367,7 +380,14 @@ export default function PlayPage() {
         const player = dashjs.MediaPlayer().create()
         playerRef.current = player
         player.updateSettings({
-          streaming: { abr: { autoSwitchBitrate: { video: false, audio: false } }, buffer: { fastSwitchEnabled: true } },
+          streaming: {
+            abr: {
+              // 手机慢速网络下自动降码率（480p→360p），保证流畅不断
+              autoSwitchBitrate: { video: true, audio: true },
+              maxBitrate: { video: 200000, audio: 140000 },
+            },
+            buffer: { fastSwitchEnabled: true },
+          },
         })
         player.initialize(v, mpdUrl, false)
         let started = false
