@@ -41,22 +41,11 @@ export default function VideoDetailPage() {
   const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
   function renderPlayer(a: Article) {
-    // 合集（多集）统一走去B站化播放页，支持选集+自动连播
-    let isSeries = false
-    try {
-      const content = typeof a.content === 'string' ? JSON.parse(a.content) : a.content
-      const list = Array.isArray(content) ? content : content?.videos
-      if (Array.isArray(list) && list.length > 1) isSeries = true
-    } catch {}
-
-    if (a.has_stream || isSeries) {
+    if (a.has_stream) {
       return (
         <iframe
           src={`/play/${articleId}`}
           allowFullScreen
-          allow="autoplay"
-          referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin"
           style={{
             position: 'absolute', top: 0, left: 0,
             width: '100%', height: '100%', border: 'none',
