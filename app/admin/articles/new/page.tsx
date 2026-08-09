@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { extractBilibiliBvid, parseBilibiliHtml } from '@/lib/bilibili'
+import { extractBilibiliBvid, parseBilibiliHtml, fetchBilibiliViewJsonp } from '@/lib/bilibili'
 
 interface BilibiliVideo {
   bvid: string
@@ -63,6 +63,32 @@ export default function NewArticlePage() {
         summary: f.summary || v.description || '',
         cover_image: f.cover_image || v.cover_url || '',
       }))
+    }
+
+    // 0) 首选：浏览器本地直连 B站 view API（JSONP，用户本地 IP，不经 CF/Deno）
+    //    返回分P准确时长，直接构建合集；数据保存时经表单写入 CF 数据库（D1）。
+    if (bvid) {
+      try {
+        const json = await fetchBilibiliViewJsonp(bvid)
+        if (json?.code === 0 && json?.data) {
+          const d = json.data
+          const pages: any[] = Array.isArray(d.pages) ? d.pages : []
+          fillForm({ title: d.title || '', description: (d.desc || '').slice(0, 500), cover_url: (d.pic || '').replace(/^http:\/\//, 'https://') })
+          if (pages.length >= 1) {
+            setSeriesInfo({
+              title: d.title || '合集',
+              videos: pages.map(p => ({
+                bvid: d.bvid || bvid, title: p.part || `第${p.page}集`,
+                cover_url: (d.pic || '').replace(/^http:\/\//, 'https://'), page: p.page, duration: p.duration || 0,
+              })),
+            })
+            setSelectedVideos(new Set(pages.map((_: unknown, i: number) => i)))
+            setForm(f => ({ ...f, type: 'series' }))
+          }
+          setFetching(false)
+          return
+        }
+      } catch {}
     }
 
     // 1) Server-side via Cloudflare Workers (enhanced headers)

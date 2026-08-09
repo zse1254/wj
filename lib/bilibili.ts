@@ -1,3 +1,27 @@
+// 客户端 JSONP 拉取 B站 视频信息：
+// 用户浏览器（用户本地 IP）直连 B站 view API，B站 view 支持官方 jsonp 回调，
+// <script> 标签跨域加载不受 CORS 限制（fetch 会被 B站 ACAO 拦截）。
+// 这样「自动获取标题/简介/封面/分P」完全脱离 CF 服务端 / Deno 代理，
+// 不烧 Deno 额度、不受 CF IP 412 封锁影响；数据由保存时写入 CF 数据库。
+export function fetchBilibiliViewJsonp(bvid: string, timeout = 9000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') { reject(new Error('not in browser')); return }
+    const cb = `__biliJsonp_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+    const script = document.createElement('script')
+    const timer = setTimeout(() => { cleanup(new Error('jsonp timeout')) }, timeout)
+    const cleanup = (err?: any) => {
+      clearTimeout(timer)
+      delete (window as any)[cb]
+      script.remove()
+      if (err) reject(err)
+    }
+    ;(window as any)[cb] = (data: any) => { cleanup(); resolve(data) }
+    script.onerror = () => cleanup(new Error('jsonp load failed'))
+    script.src = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}&jsonp=jsonp&callback=${cb}`
+    document.head.appendChild(script)
+  })
+}
+
 export function isBilibiliUrl(url: string | null): boolean {
   if (!url) return false
   try {

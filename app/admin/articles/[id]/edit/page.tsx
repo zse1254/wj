@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { type BilibiliVideo, parseBilibiliHtml } from '@/lib/bilibili'
+import { type BilibiliVideo, parseBilibiliHtml, fetchBilibiliViewJsonp } from '@/lib/bilibili'
+import { fixCoverUrl } from '@/lib/deno-proxy'
 
 export default function EditArticlePage() {
   const router = useRouter()
@@ -92,6 +93,36 @@ export default function EditArticlePage() {
       setFetching(false)
     }
 
+    const bvid = url.match(/BV[a-zA-Z0-9]+/)?.[0]
+
+    // 0) 首选：浏览器本地直连 B站 view API（JSONP，用户本地 IP，不经 CF/Deno）
+    //    JSONP 用 <script> 加载，绕过 CORS；B站 对本地 IP 不封 412。
+    //    返回分P准确时长，直接构建合集，不再需要 Deno 补齐 duration。
+    //    数据在保存文章时写入 CF 数据库（D1）。
+    if (bvid) {
+      try {
+        const json = await fetchBilibiliViewJsonp(bvid)
+        if (json?.code === 0 && json?.data) {
+          const d = json.data
+          const pages: any[] = Array.isArray(d.pages) ? d.pages : []
+          const video = { title: d.title || '', description: (d.desc || '').slice(0, 500), cover_url: d.pic || '' }
+          let series: typeof seriesInfo = null
+          if (pages.length >= 1) {
+            series = {
+              title: d.title || '合集',
+              videos: pages.map(p => ({
+                bvid: d.bvid || bvid, title: p.part || `第${p.page}集`,
+                cover_url: fixCoverUrl(d.pic || ''), page: p.page, duration: p.duration || 0, cid: p.cid,
+                description: '',
+              })),
+            }
+          }
+          fill(video, series)
+          return
+        }
+      } catch {}
+    }
+
     // 1) Server-side (returns exact durations if CF IP not blocked)
     try {
       const res = await fetch('/api/admin/bilibili', {
@@ -103,8 +134,6 @@ export default function EditArticlePage() {
         return
       }
     } catch {}
-
-    const bvid = url.match(/BV[a-zA-Z0-9]+/)?.[0]
 
     // 2) Deno Deploy proxy (does NOT return per-page duration, so we'll supplement after)
     let seriesFromDeno: typeof seriesInfo = null
