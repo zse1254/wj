@@ -67,10 +67,11 @@ export default function VideoDetailPage() {
     }
 
     if (bvid) {
+      // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
       return (
         <>
           <iframe
-            src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0&is_list=0&hide_arrows=1`}
+            src={`https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&noFullScreenButton=0`}
             scrolling="no"
             frameBorder="0"
             allowFullScreen
@@ -81,18 +82,6 @@ export default function VideoDetailPage() {
               width: '100%', height: '100%', border: 'none',
             }}
           />
-          {/* 遮挡 B站官方播放器品牌信息：顶部 logo + 中下部"进入哔哩哔哩"按钮，保留底部进度条/全屏 */}
-          <div aria-hidden style={{
-            position: 'absolute', top: 0, left: 0, width: '100%', height: '15%',
-            background: 'linear-gradient(rgba(0,0,0,.55), transparent)',
-            pointerEvents: 'none', zIndex: 2,
-          }} />
-          {/* 遮挡"进入哔哩哔哩"悬浮按钮：实测它紧贴底部控制条上方52px处(控制条高70px)，所以 bottom:90px 高32px 精确覆盖 */}
-          <div aria-hidden style={{
-            position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: '30%', height: 32,
-            bottom: 90, background: 'rgba(0,0,0,.85)', borderRadius: 4,
-            pointerEvents: 'none', zIndex: 2,
-          }} />
         </>
       )
     }
