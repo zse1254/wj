@@ -406,8 +406,11 @@ export default function EditArticlePage() {
             {/* 合集直链 = 网页播放页：合集只有一个链接，能选集+连播（这是主链接） */}
             <div className={form.type === 'series' ? 'p-2 bg-green-600 rounded-lg space-y-1.5' : 'space-y-1.5'}>
               <div className="font-semibold text-white">
-                {form.type === 'series' ? '👉 合集直链（就这一个链接，看全集、能选集、自动连播）' : '网页播放页'}
-              </div>
+{form.type === 'series' ? '👉 合集直链（就这一个链接，看全集、能选集、自动连播）' : '网页播放页'}
+            </div>
+            {!form.published && (
+              <p className="text-[11px] text-amber-200 bg-amber-600/30 px-2 py-1 rounded mt-1">未发布：主页/列表不显示，仅凭此链接可访问播放页（无站点导航）。</p>
+            )}
               <div className="flex items-center gap-2">
                 <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/play/${params.id}?v=${playVer}`}
                   className="flex-1 px-2 py-1 bg-white border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />

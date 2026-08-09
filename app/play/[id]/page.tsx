@@ -145,7 +145,9 @@ export default function PlayPage() {
     if (/^BV[a-zA-Z0-9]+$/.test(id)) return loadVideo(id, getCurPage())
 
     setStatus('加载视频信息...')
-    const res = await fetch(`/api/articles/${id}`).catch(() => null)
+    // 直链复用 /api/play/[id]（不区分发布状态）：
+    // 未发布文章只在直链可访问，不进站点列表/页面；UUID 直链即访问凭证
+    const res = await fetch(`/api/play/${id}`).catch(() => null)
     if (!res?.ok) { setStatus('视频不存在'); return }
     const json = await res.json()
     if (!json.success || !json.data) { setStatus('视频不存在'); return }
