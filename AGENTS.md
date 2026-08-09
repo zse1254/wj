@@ -203,4 +203,15 @@ https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/.../...-1-30280.m4s
 
 ## 注意
 - 用户不允许我再反复问问题。遇到不确定的，先自己读代码/查线上数据/实测，能确定就直接修。
+
+## 已定位根因并修复（2026-08，deploy aa6bc7c）
+- **根因1**：`app/play/[id]/page.tsx` 手机端原逻辑先走 durl 完整 mp4（38MB 大文件），Deno 代理慢（~17KB/s），38MB 加载不出 → 黑屏卡死、切集闪跳、退化成"单集播放器"（功能标签只剩原生播放器，无法选集连播）。
+- **根因2**：`player.initialize(v, mpdUrl, false)` 的 autoplay=false，手机端首集黑屏不自动播。
+- **修复**：手机端（isMobile）直接走 dash.js + MPD（H.264 小分片、最兼容），跳过 durl；dash 初始化 autoplay=true + streamInitialized/canPlay 时 tryAutoplay；ABR 开自动降码率（video maxBitrate 200000 → 480p/360p）抗慢网。
+- **验证**（Edge headless 手机UA + 慢速网络模拟）：手机端合集自动播放 ✓、底部选集横条切集 ✓、稳定不卡 ✓。打开合集链接就是合集播放器（剧集(37)/连播/底部选集横条），不跳单集播放器。
+## 额度教训（2026-08，用户反馈 Deno 额度烧到 90%，严重！）
+- **绝对教训**：dash.js 分片播放每个分片都走 Deno 代理（`/proxy?u=`），一集 300+ 次 Deno 请求，直接烧光免费额度（1万/月）。durl 完整 mp4 仅 1-2 次/视频。
+- **正确策略**：所有设备 durl 优先（360p 完整 mp4，`?json=1` 直连保持 Range，浏览器流式渐进播放）；dash.js 只在 durl 多次失败后兜底。**永远不要把手机端默认设为 dash.js。**
+- **手机端"黑屏/卡"根因是 Deno 慢（~17KB/s）+ 38MB 大文件加载不出**，不是播放方式问题；durl 是唯一省额度选项，接受 360p 画质。
+- 用户核心诉求排序：**省额度 > 能看**。绝不能再让播放方式烧额度。
 <!-- END:合集播放bug-2026-08 -->

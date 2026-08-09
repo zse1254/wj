@@ -68,18 +68,31 @@ export default function VideoDetailPage() {
 
     if (bvid) {
       return (
-        <iframe
-          src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0`}
-          scrolling="no"
-          frameBorder="0"
-          allowFullScreen
-          referrerPolicy="no-referrer"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
-          style={{
-            position: 'absolute', top: 0, left: 0,
-            width: '100%', height: '100%', border: 'none',
-          }}
-        />
+        <>
+          <iframe
+            src={`https://player.bilibili.com/player.html?bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&high_quality=1&autoplay=0&danmaku=0&is_list=0&hide_arrows=1`}
+            scrolling="no"
+            frameBorder="0"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation"
+            style={{
+              position: 'absolute', top: 0, left: 0,
+              width: '100%', height: '100%', border: 'none',
+            }}
+          />
+          {/* 遮挡 B站官方播放器品牌信息：顶部 logo + 中下部"进入哔哩哔哩"按钮，保留底部进度条/全屏 */}
+          <div aria-hidden style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '15%',
+            background: 'linear-gradient(rgba(0,0,0,.55), transparent)',
+            pointerEvents: 'none', zIndex: 2,
+          }} />
+          <div aria-hidden style={{
+            position: 'absolute', top: '36%', left: '50%', width: '30%', height: '9%',
+            transform: 'translateX(-50%)', background: 'rgba(0,0,0,.6)', borderRadius: 4,
+            pointerEvents: 'none', zIndex: 2,
+          }} />
+        </>
       )
     }
 

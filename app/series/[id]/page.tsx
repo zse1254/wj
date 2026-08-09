@@ -263,8 +263,9 @@ export default function SeriesDetailPage() {
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
+  // is_list=0 关闭播放结束推荐, hide_arrows=1 隐藏上下集, danmaku=0 关闭弹幕
   const currentEmbedUrl = currentBvid
-    ? `https://player.bilibili.com/player.html?bvid=${currentBvid}&p=${currentPage}&high_quality=1&autoplay=1&danmaku=0`
+    ? `https://player.bilibili.com/player.html?bvid=${currentBvid}&p=${currentPage}&high_quality=1&autoplay=1&danmaku=0&is_list=0&hide_arrows=1`
     : ''
 
   useEffect(() => {
@@ -375,6 +376,17 @@ export default function SeriesDetailPage() {
                   border: 'none',
                 }}
               />
+              {/* 遮挡 B站官方播放器品牌信息：顶部 logo + 中下部"进入哔哩哔哩"按钮，保留底部进度条/全屏 */}
+              <div aria-hidden style={{
+                position: 'absolute', top: 0, left: 0, width: '100%', height: '15%',
+                background: 'linear-gradient(rgba(0,0,0,.55), transparent)',
+                pointerEvents: 'none', zIndex: 2,
+              }} />
+              <div aria-hidden style={{
+                position: 'absolute', top: '36%', left: '50%', width: '30%', height: '9%',
+                transform: 'translateX(-50%)', background: 'rgba(0,0,0,.6)', borderRadius: 4,
+                pointerEvents: 'none', zIndex: 2,
+              }} />
             </div>
 
             <div className="flex items-center gap-3 mb-4">
