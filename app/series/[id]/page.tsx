@@ -265,7 +265,7 @@ export default function SeriesDetailPage() {
   const currentPage = currentVideo?.page || 1
   // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
   const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&noFullScreenButton=0`
+    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&noFullScreenButton=0&hideDanmakuButton=1`
     : ''
 
   useEffect(() => {
