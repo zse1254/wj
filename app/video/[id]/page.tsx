@@ -87,9 +87,10 @@ export default function VideoDetailPage() {
             background: 'linear-gradient(rgba(0,0,0,.55), transparent)',
             pointerEvents: 'none', zIndex: 2,
           }} />
+          {/* 遮挡"进入哔哩哔哩"悬浮按钮：实测它紧贴底部控制条上方52px处(控制条高70px)，所以 bottom:90px 高32px 精确覆盖 */}
           <div aria-hidden style={{
-            position: 'absolute', top: '36%', left: '50%', width: '30%', height: '9%',
-            transform: 'translateX(-50%)', background: 'rgba(0,0,0,.6)', borderRadius: 4,
+            position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: '30%', height: 32,
+            bottom: 90, background: 'rgba(0,0,0,.85)', borderRadius: 4,
             pointerEvents: 'none', zIndex: 2,
           }} />
         </>
