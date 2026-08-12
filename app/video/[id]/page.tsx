@@ -12,12 +12,11 @@ import type { Article } from '@/lib/types'
 export default function VideoDetailPage() {
   const params = useParams()
   const [article, setArticle] = useState<Article | null>(null)
-  const [articleId, setArticleId] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
-      if (res.success) { setArticle(res.data); setArticleId(res.data.id) }
+      if (res.success) { setArticle(res.data) }
     }).finally(() => setLoading(false))
   }, [params.id])
 
@@ -41,19 +40,6 @@ export default function VideoDetailPage() {
   const pageParam = article.bilibili_url?.match(/[?&]p=(\d+)/)?.[1] || null
 
   function renderPlayer(a: Article) {
-    if (a.has_stream) {
-      return (
-        <iframe
-          src={`/play/${articleId}`}
-          allowFullScreen
-          style={{
-            position: 'absolute', top: 0, left: 0,
-            width: '100%', height: '100%', border: 'none',
-          }}
-        />
-      )
-    }
-
     if (a.video_url) {
       return a.is_m3u8 ? (
         <video controls className="w-full h-full" playsInline>

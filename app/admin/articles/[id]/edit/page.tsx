@@ -19,33 +19,10 @@ export default function EditArticlePage() {
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [seriesInfo, setSeriesInfo] = useState<{ title: string; videos: BilibiliVideo[] } | null>(null)
-  const [refreshMsg, setRefreshMsg] = useState('')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
-  // 合集直链的版本参数：每次进入/渲染都生成新随机数，
+  // 播放页的版本参数：每次进入/渲染都生成新随机数，
   // 让手机浏览器拿到的链接每次都不同 → 强制加载最新播放器 JS，绕过旧缓存
   const [playVer, setPlayVer] = useState(() => Math.floor(Math.random() * 1e9))
-
-  // 本地生成完整 mp4 直链（0 Deno 请求，复制即播放）——直接在渲染时计算，跟随表单实时更新
-  const buildDirectLinks = useCallback((bilibili_url: string, type: string, content: string): { label: string; url: string }[] => {
-    const bv = bilibili_url?.match(/BV[a-zA-Z0-9]+/)?.[0]
-    if (!bv || (type !== 'video' && type !== 'series')) return []
-    if (type === 'series') {
-      try {
-        const parsed = JSON.parse(content)
-        const videos = Array.isArray(parsed?.videos) ? parsed.videos : []
-        if (videos.length) {
-          return videos.map((v: any, i: number) => ({
-            label: v.title || `第${v.page || i + 1}集`,
-            url: `/api/durl/${v.bvid || bv}?p=${v.page || 1}`,
-          }))
-        }
-      } catch {}
-      return [{ label: '单集', url: `/api/durl/${bv}?p=1` }]
-    }
-    return [{ label: '完整视频', url: `/api/durl/${bv}?p=1` }]
-  }, [])
-
-  const directLinks = buildDirectLinks(form.bilibili_url, form.type, form.content)
 
   useEffect(() => {
     Promise.all([
@@ -406,22 +383,6 @@ export default function EditArticlePage() {
                 🔄 修复合集
               </button>
             )}
-            {(form.type === 'video' || form.type === 'series') && form.bilibili_url && (
-              <button type="button" onClick={async () => {
-                try {
-                  const res = await fetch(`/api/admin/articles/${params.id}/refresh-stream`, { method: 'POST' })
-                  const text = await res.text()
-                  let data: any = {}
-                  try { data = JSON.parse(text) } catch { data = { error: text || res.statusText } }
-                  setRefreshMsg(data.success ? '✅ 直链已刷新' : ('❌ ' + (data.error || '刷新失败')))
-                } catch (e: any) {
-                  setRefreshMsg('❌ 请求异常: ' + (e?.message || e))
-                }
-              }}
-                className="text-sm text-blue-600 hover:underline px-2">
-                刷新直链
-              </button>
-            )}
             <button type="button" onClick={() => router.back()} className="px-4 py-2 border rounded-lg text-sm">取消</button>
             <button type="submit" disabled={saving}
               className="bg-[#1a73e8] text-white px-6 py-2 rounded-lg text-sm hover:bg-[#1557b0] disabled:opacity-50">
@@ -452,49 +413,9 @@ export default function EditArticlePage() {
                 </button>
               </div>
               {form.type === 'series' && (
-                <p className="text-[10px] text-green-100">手机/电脑浏览器直接打开，去B站痕迹，底部有选集横条、可自动连播。</p>
+                <p className="text-[10px] text-green-100">手机/电脑浏览器直接打开，官方极简播放器（无B站痕迹、无广告、不耗代理额度），底部有选集横条、可自动连播。</p>
               )}
             </div>
-
-            {/* 备用：单集 mp4 直链（每集一条，原生播放器，无选集界面） */}
-            <div className="pt-2 border-t border-green-200">
-              <div className="font-semibold text-green-800">
-                {form.type === 'series' ? '备用：单集 mp4 直链（每集一条，原生播放器）' : '完整 mp4 直链（复制此链接，浏览器直接打开即播放，无B站痕迹）'}
-              </div>
-              {directLinks.length > 0 && (
-                <div className="space-y-1 mt-1">
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {directLinks.map((l, i) => (
-                      <div key={i} className="flex items-center gap-2 bg-white rounded p-1.5 border border-green-200">
-                        <span className="text-xs text-gray-500 w-24 shrink-0 truncate">{l.label}</span>
-                        <input type="text" readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}${l.url}`}
-                          className="flex-1 px-2 py-1 bg-green-50 border rounded text-xs font-mono" onClick={e => (e.target as HTMLInputElement).select()} />
-                        <button type="button" onClick={() => {
-                          const url = `${window.location.origin}${l.url}`
-                          navigator.clipboard.writeText(url).then(() => alert('已复制，手机/电脑浏览器打开即可播放')).catch(() => alert('复制失败'))
-                        }}
-                          className="px-3 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 shrink-0 font-medium">复制直链</button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-gray-500">
-                    {form.type === 'series' && directLinks.length > 1
-                      ? `共 ${directLinks.length} 集，每集一条直链。`
-                      : '手机浏览器直接打开该链接，原生播放 mp4，不走任何网页播放器。'}
-                    每集首次播放耗 1-2 次代理请求，50 分钟缓存内免费重看。360p 免登录。
-                  </p>
-                </div>
-              )}
-              {directLinks.length === 0 && form.bilibili_url && (
-                <p className="text-xs text-gray-500 mt-1">无法生成直链：未识别到 BV 号</p>
-              )}
-            </div>
-
-            {refreshMsg && (
-              <div className="mt-1 p-2 bg-white border rounded text-xs font-mono break-all whitespace-pre-wrap">
-                {refreshMsg}
-              </div>
-            )}
           </div>
         )}
       </form>

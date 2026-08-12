@@ -111,11 +111,7 @@ export async function PUT(
       } catch {}
     }
 
-    // 异步获取直链
-    if (body.bilibili_url && (body.type === 'video' || body.type === 'series')) {
-      fetchAndStoreStream(id, body.bilibili_url).catch(() => {})
-    }
-
+    // 直链解析(playurl)已停用: 播放走官方极简播放器, 不再调用 Deno 解析, 省额度
     return Response.json({ success: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Server error'
