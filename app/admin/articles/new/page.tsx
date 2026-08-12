@@ -123,34 +123,6 @@ export default function NewArticlePage() {
       return
     }
 
-    // 1b) Deno Deploy proxy (bypasses Cloudflare IP block)
-    try {
-      const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(15000),
-      })
-      const denoData = await denoRes.json()
-      if (denoData.success) {
-        fillForm(denoData.data.video)
-        if (denoData.data.series) {
-          setSeriesInfo({
-            title: denoData.data.series.title,
-            videos: denoData.data.series.videos,
-          })
-          setSelectedVideos(new Set(denoData.data.series.videos.map((_: unknown, i: number) => i)))
-          setForm(f => ({ ...f, type: 'series' }))
-        }
-        setFetching(false)
-        return
-      } else {
-        console.warn('Deno proxy response error:', denoData.error)
-      }
-    } catch (e) {
-      console.warn('Deno proxy fetch failed:', e)
-    }
-
     // 2) Client-side — try fetching Bilibili page through CORS proxies
     //    (uses the user's browser IP, bypassing Cloudflare's blocked IPs)
     const pageUrl = `https://www.bilibili.com/video/${bvid}`

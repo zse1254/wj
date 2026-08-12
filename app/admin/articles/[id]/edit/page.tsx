@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { type BilibiliVideo, parseBilibiliHtml, fetchBilibiliViewJsonp } from '@/lib/bilibili'
+import { type BilibiliVideo, fetchBilibiliViewJsonp } from '@/lib/bilibili'
 import { fixCoverUrl } from '@/lib/deno-proxy'
 
 export default function EditArticlePage() {
@@ -111,87 +111,6 @@ export default function EditArticlePage() {
         return
       }
     } catch {}
-
-    // 2) Deno Deploy proxy (does NOT return per-page duration, so we'll supplement after)
-    let seriesFromDeno: typeof seriesInfo = null
-    let videoFromDeno: { title: string; description?: string; cover_url?: string } | null = null
-    try {
-      const denoRes = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
-        signal: AbortSignal.timeout(15000),
-      })
-      const denoData = await denoRes.json()
-      if (denoData.success) {
-        videoFromDeno = { title: denoData.data.video.title || '', description: (denoData.data.video.description || '').slice(0, 500), cover_url: denoData.data.video.cover_url || '' }
-        if (denoData.data.series) {
-          seriesFromDeno = { title: denoData.data.series.title, videos: denoData.data.series.videos }
-        }
-      }
-    } catch {}
-
-    // 3) Supplement per-page durations via client-side Bilibili API fetch (user's China IP)
-    if (bvid && seriesFromDeno) {
-      try {
-        const c = new AbortController()
-        const t = setTimeout(() => c.abort(), 8000)
-        const res = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
-          mode: 'cors',
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.bilibili.com' },
-          signal: c.signal,
-        }).finally(() => clearTimeout(t))
-        if (res.ok) {
-          const json = await res.json()
-          if (json.code === 0 && json.data?.pages?.length) {
-            const pagesByPage: Record<number, number> = {}
-            for (const p of json.data.pages) { pagesByPage[p.page] = p.duration || 0 }
-            seriesFromDeno = {
-              title: seriesFromDeno.title,
-              videos: seriesFromDeno.videos.map(v => ({
-                ...v,
-                duration: v.duration || pagesByPage[v.page || 0] || 0,
-              })),
-            }
-          }
-        }
-      } catch {}
-    }
-
-    // 3b) CORS proxies — fetch HTML page, parse __INITIAL_STATE__ for per-page durations
-    if (bvid && seriesFromDeno) {
-      const pageUrl = `https://www.bilibili.com/video/${bvid}`
-      const proxies = [
-        (u: string) => `https://api.allorigins.cn/raw?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-        (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-        (u: string) => `https://api.allorigins.io/raw?url=${encodeURIComponent(u)}`,
-      ]
-      for (const buildProxy of proxies) {
-        try {
-          const c = new AbortController()
-          const t = setTimeout(() => c.abort(), 8000)
-          const proxyRes = await fetch(buildProxy(pageUrl), { signal: c.signal }).finally(() => clearTimeout(t))
-          if (!proxyRes.ok) continue
-          const html = await proxyRes.text()
-          const parsed = parseBilibiliHtml(html, bvid)
-          if (parsed.series?.videos?.length) {
-            const byIndex: Record<number, number> = {}
-            parsed.series.videos.forEach((v, i) => { if (v.duration) byIndex[i] = v.duration })
-            if (Object.keys(byIndex).length > 0) {
-              seriesFromDeno = {
-                title: seriesFromDeno.title,
-                videos: seriesFromDeno.videos.map((v, i) => ({ ...v, duration: v.duration || byIndex[i] || 0 })),
-              }
-              break
-            }
-          }
-        } catch { continue }
-      }
-    }
-
-    if (videoFromDeno) {
-      fill(videoFromDeno, seriesFromDeno)
-      return
-    }
 
     // 4) Last resort: direct browser fetch to Bilibili API (no series info)
     if (bvid) {

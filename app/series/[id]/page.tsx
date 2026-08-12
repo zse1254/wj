@@ -26,7 +26,6 @@ export default function SeriesDetailPage() {
   const [autoplay, setAutoplay] = useState(true)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const requestedBvidsRef = useRef<Set<string>>(new Set())
   const [durations, setDurations] = useState<Record<number, number>>({})
   const [remaining, setRemaining] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
@@ -107,41 +106,6 @@ export default function SeriesDetailPage() {
           } catch {}
         }
         if (gotExact) continue
-
-        // Fallback: Deno proxy — per-page exact durations if available, otherwise total/count
-        if (requestedBvidsRef.current.has(bvid)) continue
-        requestedBvidsRef.current.add(bvid)
-        try {
-          const c = new AbortController()
-          const t = setTimeout(() => c.abort(), 8000)
-          const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: `https://www.bilibili.com/video/${bvid}` }),
-            signal: c.signal,
-          }).finally(() => clearTimeout(t))
-          const data = await res.json()
-          if (data.success && Array.isArray(data.data?.series?.videos)) {
-            const pagesByPage: Record<number, number> = {}
-            for (const v of data.data.series.videos as Array<{ page?: number; duration?: number }>) {
-              if (v.page && v.duration) pagesByPage[v.page] = v.duration
-            }
-            if (Object.keys(pagesByPage).length > 0) {
-              for (let i = 0; i < videos.length; i++) {
-                if (videos[i].bvid === bvid && exactByIndex[i] == null) {
-                  const pg = videos[i].page || i + 1
-                  if (pagesByPage[pg]) exactByIndex[i] = pagesByPage[pg]
-                }
-              }
-              continue
-            }
-          }
-          // Fallback: total duration only → average
-          if (data.success && data.data?.video?.duration) {
-            const count = videos.filter(v => v.bvid === bvid).length
-            const per = Math.max(30, Math.round(data.data.video.duration / count))
-            idxNeeding.forEach(i => { if (exactByIndex[i] == null) exactByIndex[i] = per })
-          }
-        } catch {}
       }
 
       if (Object.keys(exactByIndex).length === 0) return

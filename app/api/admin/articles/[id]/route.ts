@@ -1,8 +1,6 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { query, execute } from '@/lib/db'
-import { extractBilibiliBvid } from '@/lib/bilibili'
-import { fetchPlayurl } from '@/lib/deno-proxy'
 
 export async function GET(
   _request: NextRequest,
@@ -39,41 +37,8 @@ export async function GET(
   }
 }
 
-async function fetchAndStoreStream(articleId: string, bilibiliUrl: string) {
-  const bvid = extractBilibiliBvid(bilibiliUrl)
-  if (!bvid) return
-  try {
-    const data = await fetchPlayurl(bvid, undefined, 80)
-    if (data?.dash) {
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      await execute('UPDATE articles SET stream_data = ?, stream_expires_at = ? WHERE id = ?', [
-        JSON.stringify(data), expiresAt, articleId,
-      ])
-    }
-  } catch {}
-}
-
 async function ensureSeriesContent(body: any) {
-  if (body.type !== 'series') return body
-  if (body.content && typeof body.content === 'string') {
-    try {
-      const parsed = JSON.parse(body.content)
-      if (Array.isArray(parsed.videos) && parsed.videos.length > 0) return body
-    } catch {}
-  }
-  const url = body.bilibili_url
-  if (!url) return body
-  try {
-    const res = await fetch('https://rustic-mayfly-8854.zse1254.deno.net', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout(10000),
-    })
-    const data = await res.json()
-    if (data.success && Array.isArray(data.data?.series?.videos) && data.data.series.videos.length > 0) {
-      const videos = data.data.series.videos.map((v: any) => ({ bvid: v.bvid, title: v.title, cover_url: v.cover_url, page: v.page, duration: v.duration }))
-      body.content = JSON.stringify({ videos })
-    }
-  } catch {}
+  // 直链/合集重建(Deno)已停用：content 由前端 JSONP 一次性获取，保存时不再调用 Deno，省额度。
   return body
 }
 
