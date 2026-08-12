@@ -328,9 +328,9 @@ export default function SeriesDetailPage() {
                   scrolling="no"
                   frameBorder="0"
                   allowFullScreen
-                  allow="autoplay"
+                  allow="autoplay; fullscreen; encrypted-media"
                   referrerPolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin"
+                  sandbox="allow-scripts allow-same-origin allow-fullscreen"
                 style={{
                   position: 'absolute',
                   top: 0,
