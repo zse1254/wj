@@ -84,7 +84,8 @@ export default function EditArticlePage() {
           const pages: any[] = Array.isArray(d.pages) ? d.pages : []
           const video = { title: d.title || '', description: (d.desc || '').slice(0, 500), cover_url: d.pic || '' }
           let series: typeof seriesInfo = null
-          if (pages.length >= 1) {
+          // 只有多 P（分集数 >1）才是合集；单集视频只取标题/封面/简介，保持单视频（无连播、不要时长）
+          if (pages.length > 1) {
             series = {
               title: d.title || '合集',
               videos: pages.map(p => ({
@@ -107,7 +108,9 @@ export default function EditArticlePage() {
       })
       const data = await res.json()
       if (data.success) {
-        fill(data.data.video, data.data.series ? { title: data.data.series.title, videos: data.data.series.videos } : null)
+        // 单集视频不构建合集：只填标题/封面，保持单视频类型
+        const s = data.data.series?.videos?.length > 1 ? { title: data.data.series.title, videos: data.data.series.videos } : null
+        fill(data.data.video, s)
         return
       }
     } catch {}

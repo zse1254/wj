@@ -74,7 +74,8 @@ export default function NewArticlePage() {
           const d = json.data
           const pages: any[] = Array.isArray(d.pages) ? d.pages : []
           fillForm({ title: d.title || '', description: (d.desc || '').slice(0, 500), cover_url: (d.pic || '').replace(/^http:\/\//, 'https://') })
-          if (pages.length >= 1) {
+          // 只有多 P（分集数 >1）才是合集；单集视频只取标题/封面/简介，保持单视频类型（无连播、不要时长）
+          if (pages.length > 1) {
             setSeriesInfo({
               title: d.title || '合集',
               videos: pages.map(p => ({
@@ -102,7 +103,8 @@ export default function NewArticlePage() {
       if (data.success) {
         const v = data.data.video
         fillForm(v)
-        if (data.data.series) {
+        // 单集视频不构建合集：只填标题/封面，保持单视频类型
+        if (data.data.series?.videos?.length > 1) {
           setSeriesInfo({
             title: data.data.series.title,
             videos: data.data.series.videos,
@@ -142,12 +144,14 @@ export default function NewArticlePage() {
         const html = await proxyRes.text()
         const parsed = parseBilibiliHtml(html, bvid)
         fillForm(parsed.video)
-        if (parsed.series) {
+        // 单集视频不构建合集：只填标题/封面，保持单视频类型
+        const pvids = parsed.series?.videos
+        if (Array.isArray(pvids) && pvids.length > 1) {
           setSeriesInfo({
-            title: parsed.series.title,
-            videos: parsed.series.videos,
+            title: parsed.series!.title,
+            videos: pvids,
           })
-          setSelectedVideos(new Set(parsed.series.videos.map((_: unknown, i: number) => i)))
+          setSelectedVideos(new Set(pvids.map((_: unknown, i: number) => i)))
           setForm(f => ({ ...f, type: 'series' }))
         }
         setFetching(false)
@@ -189,9 +193,11 @@ export default function NewArticlePage() {
                     title: (ep.title as string) || '',
                     cover_url: (ep.cover as string) || '',
                   }))
-                  setSeriesInfo({ title: sJson.data.title || '', videos })
-                  setSelectedVideos(new Set(videos.map((_: unknown, i: number) => i)))
-                  setForm(f => ({ ...f, type: 'series' }))
+                  if (videos.length > 1) {
+                    setSeriesInfo({ title: sJson.data.title || '', videos })
+                    setSelectedVideos(new Set(videos.map((_: unknown, i: number) => i)))
+                    setForm(f => ({ ...f, type: 'series' }))
+                  }
                 }
               }
             })()

@@ -38,10 +38,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build series from pages[] (each P = one episode, with exact duration)
+    // Build series from pages[] (each P = one episode, with exact duration).
+    // 单集视频（分集数 == 1）不构建合集：只返回 video 元数据，前端保持单视频类型（无连播、不要时长）
     let series = null as null | { title: string; videos: { bvid: string; title: string; cover_url: string; page: number; duration: number; cid: number }[] }
     const pages = videoInfo?.pages || []
-    if (videoInfo && pages.length >= 1) {
+    if (videoInfo && pages.length > 1) {
       series = {
         title: videoInfo.video.title,
         videos: pages.map(p => ({
