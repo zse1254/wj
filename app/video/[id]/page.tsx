@@ -57,7 +57,7 @@ export default function VideoDetailPage() {
       return (
         <>
           <iframe
-            src={`https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`}
+            src={`https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&muted=0&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`}
             scrolling="no"
             frameBorder="0"
             allowFullScreen

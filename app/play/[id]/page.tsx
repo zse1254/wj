@@ -78,7 +78,7 @@ export default function PlayPage() {
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
   const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=0&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
     : ''
 
   const stopTimer = useCallback(() => {
