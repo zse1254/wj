@@ -79,7 +79,7 @@ export default function PlayPage() {
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
   const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1${soundOn ? '' : '&muted=1'}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
     : ''
 
   const stopTimer = useCallback(() => {
@@ -205,17 +205,14 @@ export default function PlayPage() {
                     sandbox="allow-scripts allow-same-origin allow-fullscreen"
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                   />
-                  {!soundOn && (
-                    <button
-                      onClick={() => setSoundOn(true)}
-                      aria-label="开启声音"
-                      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-white cursor-pointer"
-                      style={{ background: 'rgba(0,0,0,.35)' }}
-                    >
-                      <span className="text-5xl">🔊</span>
-                      <span className="text-sm bg-black/50 px-4 py-1.5 rounded-full">点击开启声音</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setSoundOn(s => !s)}
+                    aria-label={soundOn ? '静音' : '开启声音'}
+                    title={soundOn ? '静音' : '开启声音'}
+                    className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white text-base flex items-center justify-center shadow"
+                  >
+                    {soundOn ? '🔊' : '🔇'}
+                  </button>
                 </>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/40 text-sm">无法播放</div>
