@@ -24,6 +24,7 @@ export default function SeriesDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [played, setPlayed] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
+  const [soundOn, setSoundOn] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [durations, setDurations] = useState<Record<number, number>>({})
@@ -323,7 +324,7 @@ export default function SeriesDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
               <iframe
-                key={currentBvid}
+                key={`${currentBvid}:${soundOn ? 's' : 'm'}`}
                 src={currentEmbedUrl}
                   scrolling="no"
                   frameBorder="0"
@@ -340,6 +341,17 @@ export default function SeriesDetailPage() {
                   border: 'none',
                 }}
               />
+              {!soundOn && (
+                <button
+                  onClick={() => setSoundOn(true)}
+                  aria-label="开启声音"
+                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-white cursor-pointer"
+                  style={{ background: 'rgba(0,0,0,.35)' }}
+                >
+                  <span className="text-5xl">🔊</span>
+                  <span className="text-sm bg-black/50 px-4 py-1.5 rounded-full">点击开启声音</span>
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-3 mb-4">

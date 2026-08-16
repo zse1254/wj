@@ -29,6 +29,7 @@ export default function PlayPage() {
   const [videos, setVideos] = useState<SeriesVideo[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
+  const [soundOn, setSoundOn] = useState(false)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -192,17 +193,30 @@ export default function PlayPage() {
             <h1 className="text-lg font-bold mb-3 line-clamp-2">{article.title}</h1>
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
               {currentEmbedUrl ? (
-                <iframe
-                  key={currentBvid}
-                  src={currentEmbedUrl}
-                  scrolling="no"
-                  frameBorder="0"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; encrypted-media"
-                  referrerPolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin allow-fullscreen"
-                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                />
+                <>
+                  <iframe
+                    key={`${currentBvid}:${soundOn ? 's' : 'm'}`}
+                    src={currentEmbedUrl}
+                    scrolling="no"
+                    frameBorder="0"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; encrypted-media"
+                    referrerPolicy="no-referrer"
+                    sandbox="allow-scripts allow-same-origin allow-fullscreen"
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                  />
+                  {!soundOn && (
+                    <button
+                      onClick={() => setSoundOn(true)}
+                      aria-label="开启声音"
+                      className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-white cursor-pointer"
+                      style={{ background: 'rgba(0,0,0,.35)' }}
+                    >
+                      <span className="text-5xl">🔊</span>
+                      <span className="text-sm bg-black/50 px-4 py-1.5 rounded-full">点击开启声音</span>
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/40 text-sm">无法播放</div>
               )}

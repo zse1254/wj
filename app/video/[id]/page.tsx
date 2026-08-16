@@ -13,6 +13,7 @@ export default function VideoDetailPage() {
   const params = useParams()
   const [article, setArticle] = useState<Article | null>(null)
   const [loading, setLoading] = useState(true)
+  const [soundOn, setSoundOn] = useState(false)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -57,6 +58,7 @@ export default function VideoDetailPage() {
       return (
         <>
           <iframe
+            key={`${bvid}${pageParam ? `-${pageParam}` : ''}:${soundOn ? 's' : 'm'}`}
             src={`https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`}
             scrolling="no"
             frameBorder="0"
@@ -69,6 +71,17 @@ export default function VideoDetailPage() {
               width: '100%', height: '100%', border: 'none',
             }}
           />
+          {!soundOn && (
+            <button
+              onClick={() => setSoundOn(true)}
+              aria-label="开启声音"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-white cursor-pointer"
+              style={{ background: 'rgba(0,0,0,.35)' }}
+            >
+              <span className="text-5xl">🔊</span>
+              <span className="text-sm bg-black/50 px-4 py-1.5 rounded-full">点击开启声音</span>
+            </button>
+          )}
         </>
       )
     }
