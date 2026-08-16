@@ -25,6 +25,10 @@ export default function SeriesDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [played, setPlayed] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
+  const [unlocked, setUnlocked] = useState(false)
+  const loadTsRef = useRef<number>(Date.now())
+  const unlockKeyRef = useRef<string>('')
+  const unlockTRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [durations, setDurations] = useState<Record<number, number>>({})
@@ -228,10 +232,21 @@ export default function SeriesDetailPage() {
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
+  const currentKey = currentBvid ? `${currentBvid}:${currentPage}` : ''
   // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
-  const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
-    : ''
+  // 统一静音起播(muted=1)规避各端自动播放策略差异; 点击全屏遮罩用 t= 参数从当前位置有声续播, 不重播
+  const currentEmbedUrl = (() => {
+    if (!currentBvid) return ''
+    const resumeT = unlocked && unlockKeyRef.current === currentKey ? `&t=${unlockTRef.current}` : ''
+    return `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1${unlocked ? '' : '&muted=1'}${resumeT}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+  })()
+
+  const unlockSound = useCallback(() => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - loadTsRef.current) / 1000))
+    unlockKeyRef.current = currentKey
+    unlockTRef.current = elapsed
+    setUnlocked(true)
+  }, [currentKey])
 
   useEffect(() => {
     if (!autoplay || !currentVideo) {
@@ -324,7 +339,7 @@ export default function SeriesDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
               <iframe
-                key={currentBvid}
+                key={`${currentBvid}:${currentPage}:${unlocked ? 's' : 'm'}`}
                 src={currentEmbedUrl}
                   scrolling="no"
                   frameBorder="0"
@@ -332,6 +347,7 @@ export default function SeriesDetailPage() {
                   allow="autoplay; fullscreen; encrypted-media"
                   referrerPolicy="no-referrer"
                   sandbox="allow-scripts allow-same-origin allow-fullscreen"
+                  onLoad={() => { loadTsRef.current = Date.now() }}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -341,7 +357,7 @@ export default function SeriesDetailPage() {
                   border: 'none',
                 }}
               />
-              <SoundGuide key={`guide-${currentBvid}-${currentPage}`} show />
+              <SoundGuide visible={!unlocked} onUnlock={unlockSound} />
             </div>
 
             <div className="flex items-center gap-3 mb-4">

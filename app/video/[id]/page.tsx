@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
@@ -14,6 +14,8 @@ export default function VideoDetailPage() {
   const params = useParams()
   const [article, setArticle] = useState<Article | null>(null)
   const [loading, setLoading] = useState(true)
+  const [unlocked, setUnlocked] = useState(false)
+  const loadTsRef = useRef<number>(Date.now())
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -55,11 +57,13 @@ export default function VideoDetailPage() {
 
     if (bvid) {
       // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
-      // 统一静音起播(muted=1)规避各端自动播放策略差异; 声音由 B站自带音量按钮或指引气泡开启
-      const src = `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+      // 统一静音起播(muted=1)规避各端自动播放策略差异; 点击全屏遮罩用 t= 参数从当前位置有声续播, 不重播
+      const resumeT = unlocked ? `&t=${Math.max(0, Math.floor((Date.now() - loadTsRef.current) / 1000))}` : ''
+      const src = `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1${unlocked ? '' : '&muted=1'}${resumeT}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
       return (
         <>
           <iframe
+            key={unlocked ? `s-${bvid}${pageParam || ''}` : `m-${bvid}${pageParam || ''}`}
             src={src}
             scrolling="no"
             frameBorder="0"
@@ -67,12 +71,13 @@ export default function VideoDetailPage() {
             allow="autoplay; fullscreen; encrypted-media"
             referrerPolicy="no-referrer"
             sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-presentation allow-fullscreen"
+            onLoad={() => { loadTsRef.current = Date.now() }}
             style={{
               position: 'absolute', top: 0, left: 0,
               width: '100%', height: '100%', border: 'none',
             }}
           />
-          <SoundGuide key={`guide-${bvid}${pageParam ? `-${pageParam}` : ''}`} show />
+          <SoundGuide visible={!unlocked} onUnlock={() => setUnlocked(true)} />
         </>
       )
     }

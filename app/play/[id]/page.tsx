@@ -30,6 +30,7 @@ export default function PlayPage() {
   const [videos, setVideos] = useState<SeriesVideo[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
+  const [unlocked, setUnlocked] = useState(false)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -37,6 +38,9 @@ export default function PlayPage() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const remainingRef = useRef<number | null>(null)
   const activeKeyRef = useRef<string>('')
+  const loadTsRef = useRef<number>(Date.now())
+  const unlockKeyRef = useRef<string>('')
+  const unlockTRef = useRef<number>(0)
 
   const isMobileUA = typeof navigator !== 'undefined' && /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
   const pParam = sp.get('p')
@@ -78,9 +82,19 @@ export default function PlayPage() {
   const currentVideo = videos[currentIndex]
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
-  const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
-    : ''
+  const currentKey = currentBvid ? `${currentBvid}:${currentPage}` : ''
+  const currentEmbedUrl = (() => {
+    if (!currentBvid) return ''
+    const resumeT = unlocked && unlockKeyRef.current === currentKey ? `&t=${unlockTRef.current}` : ''
+    return `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1${unlocked ? '' : '&muted=1'}${resumeT}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+  })()
+
+  const unlockSound = useCallback(() => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - loadTsRef.current) / 1000))
+    unlockKeyRef.current = currentKey
+    unlockTRef.current = elapsed
+    setUnlocked(true)
+  }, [currentKey])
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
@@ -195,7 +209,7 @@ export default function PlayPage() {
               {currentEmbedUrl ? (
                 <>
                   <iframe
-                    key={currentBvid}
+                    key={`${currentBvid}:${currentPage}:${unlocked ? 's' : 'm'}`}
                     src={currentEmbedUrl}
                     scrolling="no"
                     frameBorder="0"
@@ -203,9 +217,10 @@ export default function PlayPage() {
                     allow="autoplay; fullscreen; encrypted-media"
                     referrerPolicy="no-referrer"
                     sandbox="allow-scripts allow-same-origin allow-fullscreen"
+                    onLoad={() => { loadTsRef.current = Date.now() }}
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                   />
-                  <SoundGuide key={`guide-${currentBvid}-${currentPage}`} show />
+                  <SoundGuide visible={!unlocked} onUnlock={unlockSound} />
                 </>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/40 text-sm">无法播放</div>
