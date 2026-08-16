@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import FavoriteButton from '@/components/FavoriteButton'
+import SoundGuide from '@/components/SoundGuide'
 import { extractBilibiliBvid } from '@/lib/bilibili'
 import type { Article } from '@/lib/types'
 
@@ -13,7 +14,6 @@ export default function VideoDetailPage() {
   const params = useParams()
   const [article, setArticle] = useState<Article | null>(null)
   const [loading, setLoading] = useState(true)
-  const [soundOn, setSoundOn] = useState(false)
 
   useEffect(() => {
     fetch(`/api/articles/${params.id}`).then(r => r.json()).then(res => {
@@ -55,11 +55,11 @@ export default function VideoDetailPage() {
 
     if (bvid) {
       // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
-      const src = `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1${soundOn ? '' : '&muted=1'}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+      // 统一静音起播(muted=1)规避各端自动播放策略差异; 声音由 B站自带音量按钮或指引气泡开启
+      const src = `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${bvid}${pageParam ? `&p=${pageParam}` : ''}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
       return (
         <>
           <iframe
-            key={`${bvid}${pageParam ? `-${pageParam}` : ''}:${soundOn ? 's' : 'm'}`}
             src={src}
             scrolling="no"
             frameBorder="0"
@@ -72,14 +72,7 @@ export default function VideoDetailPage() {
               width: '100%', height: '100%', border: 'none',
             }}
           />
-          <button
-            onClick={() => setSoundOn(s => !s)}
-            aria-label={soundOn ? '静音' : '开启声音'}
-            title={soundOn ? '静音' : '开启声音'}
-            className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white text-base flex items-center justify-center shadow"
-          >
-            {soundOn ? '🔊' : '🔇'}
-          </button>
+          <SoundGuide key={`guide-${bvid}${pageParam ? `-${pageParam}` : ''}`} show />
         </>
       )
     }

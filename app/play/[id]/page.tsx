@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
+import SoundGuide from '@/components/SoundGuide'
 
 interface SeriesVideo {
   bvid: string
@@ -29,7 +30,6 @@ export default function PlayPage() {
   const [videos, setVideos] = useState<SeriesVideo[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
-  const [soundOn, setSoundOn] = useState(false)
   const [remaining, setRemaining] = useState<number | null>(null)
   const [paused, setPaused] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -79,7 +79,7 @@ export default function PlayPage() {
   const currentBvid = currentVideo?.bvid
   const currentPage = currentVideo?.page || 1
   const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1${soundOn ? '' : '&muted=1'}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
     : ''
 
   const stopTimer = useCallback(() => {
@@ -195,7 +195,7 @@ export default function PlayPage() {
               {currentEmbedUrl ? (
                 <>
                   <iframe
-                    key={`${currentBvid}:${soundOn ? 's' : 'm'}`}
+                    key={currentBvid}
                     src={currentEmbedUrl}
                     scrolling="no"
                     frameBorder="0"
@@ -205,14 +205,7 @@ export default function PlayPage() {
                     sandbox="allow-scripts allow-same-origin allow-fullscreen"
                     style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                   />
-                  <button
-                    onClick={() => setSoundOn(s => !s)}
-                    aria-label={soundOn ? '静音' : '开启声音'}
-                    title={soundOn ? '静音' : '开启声音'}
-                    className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white text-base flex items-center justify-center shadow"
-                  >
-                    {soundOn ? '🔊' : '🔇'}
-                  </button>
+                  <SoundGuide key={`guide-${currentBvid}-${currentPage}`} show />
                 </>
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white/40 text-sm">无法播放</div>

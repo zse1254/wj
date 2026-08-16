@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import FavoriteButton from '@/components/FavoriteButton'
+import SoundGuide from '@/components/SoundGuide'
 import type { Article } from '@/lib/types'
 
 interface SeriesVideo {
@@ -24,7 +25,6 @@ export default function SeriesDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [played, setPlayed] = useState(0)
   const [autoplay, setAutoplay] = useState(true)
-  const [soundOn, setSoundOn] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [durations, setDurations] = useState<Record<number, number>>({})
@@ -230,7 +230,7 @@ export default function SeriesDetailPage() {
   const currentPage = currentVideo?.page || 1
   // 极简模式: html5mobileplayer 天然无 logo/标题/进入按钮/推荐, hideCoverInfo 隐藏播放量, danmaku 关弹幕
   const currentEmbedUrl = currentBvid
-    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1${soundOn ? '' : '&muted=1'}&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
+    ? `https://www.bilibili.com/blackboard/html5mobileplayer.html?isOutside=true&bvid=${currentBvid}&p=${currentPage}&autoplay=1&muted=1&danmaku=0&hideCoverInfo=1&hideDanmakuButton=1`
     : ''
 
   useEffect(() => {
@@ -324,7 +324,7 @@ export default function SeriesDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="relative aspect-video bg-black rounded-xl overflow-hidden mb-3">
               <iframe
-                key={`${currentBvid}:${soundOn ? 's' : 'm'}`}
+                key={currentBvid}
                 src={currentEmbedUrl}
                   scrolling="no"
                   frameBorder="0"
@@ -341,14 +341,7 @@ export default function SeriesDetailPage() {
                   border: 'none',
                 }}
               />
-              <button
-                onClick={() => setSoundOn(s => !s)}
-                aria-label={soundOn ? '静音' : '开启声音'}
-                title={soundOn ? '静音' : '开启声音'}
-                className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white text-base flex items-center justify-center shadow"
-              >
-                {soundOn ? '🔊' : '🔇'}
-              </button>
+              <SoundGuide key={`guide-${currentBvid}-${currentPage}`} show />
             </div>
 
             <div className="flex items-center gap-3 mb-4">
